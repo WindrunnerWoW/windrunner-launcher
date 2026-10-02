@@ -1,0 +1,107 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>WindrunnerLauncher.App</RootNamespace>
+    <AssemblyName>WindrunnerLauncher</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <TrimMode>link</TrimMode>
+    <DebuggerSupport>true</DebuggerSupport>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EmbedNativeOs Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('linux'))">linux</EmbedNativeOs>
+    <EmbedNativeOs Condition="'$(EmbedNativeOs)' == '' AND $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win'))">windows</EmbedNativeOs>
+    <EmbedNativeOs Condition="'$(EmbedNativeOs)' == '' AND $([MSBuild]::IsOSPlatform('Linux'))">linux</EmbedNativeOs>
+    <EmbedNativeOs Condition="'$(EmbedNativeOs)' == ''">windows</EmbedNativeOs>
+    <DefineConstants Condition="'$(EmbedNativeOs)' == 'linux'">$(DefineConstants);LINUX_LAUNCHER</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.20" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.20" Condition="'$(Configuration)' == 'Debug'" />
+    <!-- Direct refs so GeneratePathProperty points at the restored nupkgs we embed.
+         Keep these versions aligned with Avalonia.Skia / Avalonia.Win32 / Avalonia.Linux. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="2.88.9" GeneratePathProperty="true" Condition="'$(EmbedNativeOs)' != 'linux'" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Win32" Version="8.3.1.1" GeneratePathProperty="true" Condition="'$(EmbedNativeOs)' != 'linux'" />
+    <PackageReference Include="Avalonia.Angle.Windows.Natives" Version="2.1.25547.20250602" GeneratePathProperty="true" Condition="'$(EmbedNativeOs)' != 'linux'" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="2.88.9" GeneratePathProperty="true" Condition="'$(EmbedNativeOs)' == 'linux'" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="8.3.1.1" GeneratePathProperty="true" Condition="'$(EmbedNativeOs)' == 'linux'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WindrunnerLauncher.Core\WindrunnerLauncher.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+    <AvaloniaResource Include="Styles\**" />
+  </ItemGroup>
+
+  <!-- NativeAOT cannot load Skia from a resource. Embed the natives for this OS and unpack
+       them beside the executable in NativeLibraryBootstrap. Linux does not use ANGLE. -->
+  <Target Name="EmbedNativeLibraries" BeforeTargets="PrepareForBuild" Condition="'$(EmbedNativeOs)' != 'linux'">
+    <PropertyGroup>
+      <_LibSkia>$(PkgSkiaSharp_NativeAssets_Win32)/runtimes/win-x64/native/libSkiaSharp.dll</_LibSkia>
+      <_LibHarf>$(PkgHarfBuzzSharp_NativeAssets_Win32)/runtimes/win-x64/native/libHarfBuzzSharp.dll</_LibHarf>
+      <_LibAngle Condition="Exists('$(PkgAvalonia_Angle_Windows_Natives)/runtimes/win-x64/native/av_libglesv2.dll')">$(PkgAvalonia_Angle_Windows_Natives)/runtimes/win-x64/native/av_libglesv2.dll</_LibAngle>
+      <_LibAngle Condition="'$(_LibAngle)' == '' AND Exists('$(PkgAvalonia_Angle_Windows_Natives)/runtimes/win7-x64/native/av_libglesv2.dll')">$(PkgAvalonia_Angle_Windows_Natives)/runtimes/win7-x64/native/av_libglesv2.dll</_LibAngle>
+      <_LibAngle Condition="'$(_LibAngle)' == '' AND Exists('$(PkgAvalonia_Angle_Windows_Natives)/runtimes/win10-x64/native/av_libglesv2.dll')">$(PkgAvalonia_Angle_Windows_Natives)/runtimes/win10-x64/native/av_libglesv2.dll</_LibAngle>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_LibSkia)')" Text="Embedded native library not found: $(_LibSkia). Restore packages." />
+    <Error Condition="!Exists('$(_LibHarf)')" Text="Embedded native library not found: $(_LibHarf). Restore packages." />
+    <Error Condition="'$(_LibAngle)' == '' OR !Exists('$(_LibAngle)')" Text="Embedded native library av_libglesv2.dll not found under $(PkgAvalonia_Angle_Windows_Natives). Restore packages." />
+    <ItemGroup>
+      <EmbeddedResource Include="$(_LibSkia)">
+        <LogicalName>libSkiaSharp.dll</LogicalName>
+        <Type>Non-Resx</Type>
+      </EmbeddedResource>
+      <EmbeddedResource Include="$(_LibHarf)">
+        <LogicalName>libHarfBuzzSharp.dll</LogicalName>
+        <Type>Non-Resx</Type>
+      </EmbeddedResource>
+      <EmbeddedResource Include="$(_LibAngle)">
+        <LogicalName>av_libglesv2.dll</LogicalName>
+        <Type>Non-Resx</Type>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="EmbedLinuxNativeLibraries" BeforeTargets="PrepareForBuild" Condition="'$(EmbedNativeOs)' == 'linux'">
+    <PropertyGroup>
+      <_LibSkia>$(PkgSkiaSharp_NativeAssets_Linux)/runtimes/linux-x64/native/libSkiaSharp.so</_LibSkia>
+      <_LibHarf>$(PkgHarfBuzzSharp_NativeAssets_Linux)/runtimes/linux-x64/native/libHarfBuzzSharp.so</_LibHarf>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_LibSkia)')" Text="Embedded native library not found: $(_LibSkia). Restore packages." />
+    <Error Condition="!Exists('$(_LibHarf)')" Text="Embedded native library not found: $(_LibHarf). Restore packages." />
+    <ItemGroup>
+      <EmbeddedResource Include="$(_LibSkia)">
+        <LogicalName>libSkiaSharp.so</LogicalName>
+        <Type>Non-Resx</Type>
+      </EmbeddedResource>
+      <EmbeddedResource Include="$(_LibHarf)">
+        <LogicalName>libHarfBuzzSharp.so</LogicalName>
+        <Type>Non-Resx</Type>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
+
+  <!-- Loose copies in the publish folder are unused: the executable unpacks the embedded ones. -->
+  <Target Name="RemoveLooseNativesFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'libSkiaSharp.dll'" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'libHarfBuzzSharp.dll'" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'av_libglesv2.dll'" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'libSkiaSharp.so'" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'libHarfBuzzSharp.so'" />
+    </ItemGroup>
+  </Target>
+</Project>

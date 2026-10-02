@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.Dialogs.ConfirmDialog"
+        Width="520"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent">
+  <Panel>
+    <Border Classes="dialog-surface" Margin="16" Padding="18">
+      <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="14">
+        <TextBlock x:Name="HeadingText" Classes="subheading" />
+        <TextBlock x:Name="MessageText" Grid.Row="1" Classes="muted" />
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <controls:LauncherButton Content="Cancel" Click="CancelClicked" />
+          <controls:LauncherButton x:Name="ConfirmButton" Classes="danger" Click="ConfirmClicked" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Panel>
+</Window>

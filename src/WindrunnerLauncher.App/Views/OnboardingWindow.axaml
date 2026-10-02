@@ -1,0 +1,96 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WindrunnerLauncher.App.ViewModels"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.OnboardingWindow"
+        x:DataType="vm:OnboardingViewModel"
+        Title="Windrunner setup"
+        Width="780"
+        Height="640"
+        MinWidth="700"
+        MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        UseLayoutRounding="True">
+  <Grid Margin="1">
+  <Border Classes="dialog-surface" BorderThickness="0" ClipToBounds="True">
+    <Grid RowDefinitions="84,*,Auto">
+      <Grid Background="{DynamicResource AppChromeBrush}" PointerPressed="HeaderPointerPressed">
+        <Grid ColumnDefinitions="*,Auto" Margin="28,16">
+          <StackPanel Spacing="2">
+            <TextBlock Text="WINDRUNNER" Classes="eyebrow" Foreground="#F0A13A" />
+            <TextBlock Text="Set up your launcher" Classes="heading" FontSize="24" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="window-control close" Click="CloseClicked" ToolTip.Tip="Close">
+            <Path Classes="window-glyph"
+                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                  Data="M 0,0 L 10,10 M 10,0 L 0,10" />
+          </Button>
+        </Grid>
+      </Grid>
+
+      <ScrollViewer Grid.Row="1">
+        <StackPanel Margin="28,22" Spacing="12">
+          <Border Classes="inset-metal">
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="18">
+              <StackPanel><TextBlock Text="01" Classes="eyebrow" /><TextBlock Text="{Binding Texts[onboarding.language]}" Classes="subheading" /></StackPanel>
+              <ComboBox Grid.Column="1" Classes="realm-select" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+          <Border Classes="inset-metal">
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="18">
+              <StackPanel><TextBlock Text="02" Classes="eyebrow" /><TextBlock Text="{Binding Texts[onboarding.install]}" Classes="subheading" /></StackPanel>
+              <StackPanel Grid.Column="1" Spacing="8">
+                <RadioButton GroupName="InstallChoice" Content="{Binding Texts[onboarding.client.only]}" IsChecked="{Binding IsClientOnly}" />
+                <RadioButton GroupName="InstallChoice" Content="{Binding Texts[onboarding.client.server]}" IsChecked="{Binding IsClientAndServer}" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Classes="inset-metal">
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="18">
+              <StackPanel><TextBlock Text="03" Classes="eyebrow" /><TextBlock Text="{Binding Texts[onboarding.client.source]}" Classes="subheading" /></StackPanel>
+              <StackPanel Grid.Column="1" Spacing="9">
+                <RadioButton GroupName="ClientSource" Content="{Binding InstalledClientLabel}" IsChecked="{Binding IsInstalledSource}" IsVisible="{Binding HasInstalledClient}" />
+                <RadioButton GroupName="ClientSource" Content="{Binding Texts[onboarding.download]}" IsChecked="{Binding IsDownloadSource}" IsEnabled="{Binding CanDownloadClient}" />
+                <TextBlock Text="{Binding Texts[onboarding.bootstrap.unavailable]}" Classes="muted" FontSize="12" IsVisible="{Binding IsDownloadUnavailable}" />
+                <RadioButton GroupName="ClientSource" Content="{Binding Texts[onboarding.locate]}" IsChecked="{Binding IsLocateSource}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding IsLocateSource}">
+                  <TextBox Text="{Binding ExistingClientPath}" IsReadOnly="True" Watermark="Select the folder containing WoW.exe" />
+                  <controls:LauncherButton Grid.Column="1" Content="Browse…" Command="{Binding LocateCommand}" />
+                </Grid>
+                <CheckBox Content="{Binding Texts[onboarding.managed.copy]}" IsChecked="{Binding CreateManagedCopy}" />
+                <TextBlock Text="Recommended: create a private client copy so your original installation stays untouched." Classes="muted" FontSize="12" />
+              </StackPanel>
+            </Grid>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <Border Grid.Row="2" Background="{DynamicResource AppChromeBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="18" Margin="28,12" MinHeight="44">
+          <StackPanel VerticalAlignment="Center" Spacing="4">
+            <TextBlock Text="You can change these options later in Settings." Classes="muted"
+                       IsVisible="{Binding ShowHelpText}" />
+            <controls:GoldProgressBar IsVisible="{Binding HasProgress}"
+                                      Value="{Binding ProgressValue}"
+                                      IsIndeterminate="{Binding ProgressIndeterminate}"
+                                      Caption="{Binding ProgressText}" />
+            <TextBlock Text="{Binding ProgressText}" Classes="muted" FontSize="12"
+                       IsVisible="{Binding ShowStatusText}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <controls:LauncherButton Classes="dialog-secondary" Content="Skip for now" Command="{Binding SkipCommand}" />
+            <controls:LauncherButton Classes="realm-save-button" Content="{Binding Texts[onboarding.continue]}" Command="{Binding ContinueCommand}" IsEnabled="{Binding CanContinue}" />
+          </StackPanel>
+        </Grid>
+      </Border>
+    </Grid>
+  </Border>
+  <Border Classes="dialog-surface"
+          Background="Transparent"
+          IsHitTestVisible="False" />
+  </Grid>
+</Window>

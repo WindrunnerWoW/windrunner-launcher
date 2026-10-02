@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="WindrunnerLauncher.App.Controls.StonePanel"
+             x:Name="Root">
+  <Border Classes="inset-metal" Padding="16">
+    <Grid RowDefinitions="Auto,*" RowSpacing="12">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+        <Border Width="3" Background="{StaticResource AccentBrush}" />
+        <TextBlock Grid.Column="1"
+                   Text="{Binding Header, ElementName=Root}"
+                   Classes="subheading"
+                   VerticalAlignment="Center" />
+        <ContentControl Grid.Column="2" Content="{Binding HeaderContent, ElementName=Root}" />
+      </Grid>
+      <ContentControl Grid.Row="1" Content="{Binding PanelContent, ElementName=Root}" />
+    </Grid>
+  </Border>
+</UserControl>

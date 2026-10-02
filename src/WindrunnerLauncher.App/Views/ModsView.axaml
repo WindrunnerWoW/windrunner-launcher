@@ -1,0 +1,106 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WindrunnerLauncher.App.ViewModels"
+             xmlns:controls="using:WindrunnerLauncher.App.Controls"
+             x:Class="WindrunnerLauncher.App.Views.ModsView"
+             x:DataType="vm:ModsViewModel">
+  <Grid>
+    <Image Source="/Assets/Backgrounds/home_realm.png" Stretch="UniformToFill" Opacity="0.14" />
+    <Border Background="{DynamicResource AppOverlayBrush}" />
+    <Grid RowDefinitions="Auto,*" Margin="18,14,18,14" RowSpacing="12">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel>
+          <TextBlock Text="{Binding Texts[nav.mods]}" Classes="heading" />
+          <TextBlock Text="{Binding RealmName}" Classes="muted" FontSize="13" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Width="220" Spacing="4" IsVisible="{Binding HasDownload}">
+          <TextBlock Text="{Binding DownloadText}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
+          <ProgressBar Value="{Binding DownloadProgress}" Minimum="0" Maximum="1"
+                       IsIndeterminate="{Binding DownloadIndeterminate}" Height="6" />
+        </StackPanel>
+      </Grid>
+
+      <Grid Grid.Row="1" ColumnDefinitions="1.55*,1*" ColumnSpacing="14">
+        <Grid RowDefinitions="*,*" RowSpacing="14">
+          <controls:ParchmentPanel>
+            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+              <TextBlock Text="CLIENT" Classes="eyebrow" />
+              <TextBlock Grid.Row="1" Text="Client Mods &amp; Tools" Classes="subheading" />
+              <TextBlock Grid.Row="2" Text="Mod loaders, launch tweaks, and other client-side tools for this realm."
+                         Classes="muted" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Top" />
+              <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding ModsSummaryText}" Classes="muted" FontSize="12" VerticalAlignment="Center" />
+                <controls:LauncherButton Grid.Column="1" Content="Manage" Classes="accent"
+                                         Command="{Binding OpenModsToolsCommand}" Padding="16,7" />
+              </Grid>
+            </Grid>
+          </controls:ParchmentPanel>
+
+          <controls:ParchmentPanel Grid.Row="1">
+            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+              <TextBlock Text="COMMUNITY" Classes="eyebrow" />
+              <TextBlock Grid.Row="1" Text="Addons" Classes="subheading" />
+              <TextBlock Grid.Row="2" Text="Browse, install, and update UI addons built for this client version."
+                         Classes="muted" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Top" />
+              <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding Addons.SummaryText}" Classes="muted" FontSize="12" VerticalAlignment="Center" />
+                <controls:LauncherButton Grid.Column="1" Content="Manage" Classes="accent"
+                                         Command="{Binding OpenAddonsCommand}" Padding="16,7" />
+              </Grid>
+            </Grid>
+          </controls:ParchmentPanel>
+        </Grid>
+
+        <Border Grid.Column="1" Classes="inset-metal" Padding="16">
+          <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="10">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="6">
+                <TextBlock Text="Client MPQ files" Classes="subheading" />
+                <TextBlock Text="Base archives and patch-1 through patch-9 stay active. Other Data MPQs can be switched for each realm."
+                           Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                <TextBlock Text="Disabled files stay in Data/DisabledMPQs for reuse. Realm choices are applied before Play."
+                           Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding PatchUpdatesText}" IsVisible="{Binding HasPatchUpdates}"
+                           Foreground="#F0AD57" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
+              </StackPanel>
+              <controls:LauncherButton Grid.Column="1" Content="{Binding MpqFilterLabel}"
+                                       Command="{Binding ToggleMpqFilterCommand}"
+                                       VerticalAlignment="Top" Padding="10,5" FontSize="11" />
+            </Grid>
+            <TextBlock Grid.Row="1" Text="{Binding HiddenDefaultMpqText}" IsVisible="{Binding HasHiddenDefaultMpqs}"
+                       Classes="muted" FontSize="11" FontStyle="Italic" />
+            <Grid Grid.Row="2" ColumnDefinitions="*,88,74" ColumnSpacing="8" Margin="0,0,14,0">
+              <TextBlock Text="FILE" Classes="eyebrow" />
+              <TextBlock Grid.Column="1" Text="KIND" Classes="eyebrow" />
+              <TextBlock Grid.Column="2" Text="STATE" Classes="eyebrow" />
+            </Grid>
+            <TextBlock Grid.Row="3" Text="{Binding EmptyMpqMessage}"
+                       Classes="muted" TextWrapping="Wrap" IsVisible="{Binding NoMpqItems}" />
+            <ScrollViewer Grid.Row="3" IsVisible="{Binding HasMpqItems}">
+              <ItemsControl ItemsSource="{Binding MpqItems}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ClientMpqItemViewModel">
+                    <Border BorderBrush="{DynamicResource AppSeparatorBrush}" BorderThickness="0,0,0,1" Padding="0,7" Margin="0,0,14,0">
+                      <Grid ColumnDefinitions="*,88,74" ColumnSpacing="8">
+                        <StackPanel Spacing="1">
+                          <TextBlock Text="{Binding FileName}" Classes="ink" FontWeight="SemiBold" FontSize="13" />
+                          <TextBlock Text="{Binding AvailabilityLabel}" Classes="muted" FontSize="10" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{Binding KindLabel}" Classes="eyebrow" VerticalAlignment="Center" />
+                        <controls:LauncherButton Grid.Column="2" Content="{Binding ToggleLabel}"
+                                                 Command="{Binding ToggleCommand}" IsEnabled="{Binding CanToggle}"
+                                                 Classes.accent="{Binding IsEnableAction}"
+                                                 Classes.danger="{Binding IsDisableAction}"
+                                                 Padding="5,3" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </Grid>
+        </Border>
+      </Grid>
+    </Grid>
+  </Grid>
+</UserControl>

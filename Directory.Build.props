@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>13.0</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <Company>Windrunner Launcher</Company>
+    <Product>Windrunner Launcher</Product>
+    <Copyright>Copyright (c) the Windrunner Launcher contributors</Copyright>
+    <Version>0.1.0</Version>
+    <Authors>Windrunner Launcher contributors</Authors>
+  </PropertyGroup>
+</Project>

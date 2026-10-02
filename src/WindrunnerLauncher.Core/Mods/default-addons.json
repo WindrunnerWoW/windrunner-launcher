@@ -1,0 +1,141 @@
+{
+  "addons": [
+    {
+      "id": "windrunner-voiceover",
+      "name": "Windrunner Voiceover",
+      "author": "WindrunnerWoW",
+      "category": "Audio",
+      "description": "Our server-specific VoiceOver fork, maintained and tuned for Windrunner WoW's 1.12 client and content.",
+      "version": "source",
+      "url": "https://github.com/WindrunnerWoW/windrunner-voiceover",
+      "gitHubRepo": "WindrunnerWoW/windrunner-voiceover",
+      "assetFilter": "*.zip",
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "windrunner-voiceover-data",
+      "name": "Windrunner Voiceover Data",
+      "author": "WindrunnerWoW",
+      "category": "Audio",
+      "description": "Our server-specific VoiceOver data pack.",
+      "version": "source",
+      "url": "https://github.com/WindrunnerWoW/windrunner-voiceover-data",
+      "gitHubRepo": "WindrunnerWoW/windrunner-voiceover-data",
+      "assetFilter": "*.zip",
+      "installAllMatchingAssets": true,
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "pfquest",
+      "name": "pfQuest",
+      "author": "shagu",
+      "category": "Quests",
+      "description": "Quest, item and NPC database for Vanilla WoW with map pins and navigation.",
+      "version": "7.0.1",
+      "url": "https://github.com/shagu/pfQuest/releases/latest/download/pfQuest-enUS.zip",
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "pfquest-turtle",
+      "name": "pfQuest-turtle",
+      "author": "shagu",
+      "category": "Quests",
+      "description": "Turtle WoW quest and database extension for pfQuest.",
+      "version": "source",
+      "url": "https://github.com/shagu/pfQuest-turtle/archive/refs/heads/master.zip",
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "pfui",
+      "name": "pfUI",
+      "author": "shagu",
+      "category": "UI",
+      "description": "Full interface replacement for Vanilla WoW with unit frames, action bars and more.",
+      "version": "5.5.4",
+      "url": "https://github.com/shagu/pfUI/archive/refs/heads/master.zip",
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "pfui-turtle",
+      "name": "pfUI-turtle",
+      "author": "doorknob6",
+      "category": "UI",
+      "description": "Turtle WoW compatibility and content extension for pfUI.",
+      "version": "source",
+      "url": "https://github.com/doorknob6/pfUI-turtle/archive/refs/heads/master.zip",
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "aux",
+      "name": "aux",
+      "author": "shirsig",
+      "category": "Economy",
+      "description": "Auction house replacement for Vanilla WoW with search, history and posting tools.",
+      "version": "source",
+      "url": "https://github.com/shirsig/aux-addon-vanilla/archive/refs/heads/master.zip",
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "atlas-turtle",
+      "name": "Atlas Turtle WoW",
+      "author": "Otari98",
+      "category": "Maps",
+      "description": "Dungeon, battleground, flight path and transport maps for Turtle WoW.",
+      "version": "source",
+      "url": "https://github.com/Otari98/Atlas/archive/refs/heads/master.zip",
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "atlasloot-turtle",
+      "name": "AtlasLoot Turtle WoW",
+      "author": "Otari98",
+      "category": "Loot",
+      "description": "Browse boss drops, crafted items, reputation rewards and Turtle WoW content.",
+      "version": "1.1.4",
+      "url": "https://github.com/Otari98/AtlasLoot/archive/refs/heads/master.zip",
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "shagudps",
+      "name": "ShaguDPS",
+      "author": "shagu",
+      "category": "Combat",
+      "description": "Lightweight, locale-independent damage meter for Vanilla 1.12 clients.",
+      "version": "source",
+      "url": "https://github.com/shagu/ShaguDPS/archive/refs/heads/master.zip",
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "vanilla-storyline",
+      "name": "VanillaStoryline",
+      "author": "tubtubs",
+      "category": "Quests",
+      "description": "Immersive quest dialogue presentation for the Vanilla client.",
+      "version": "source",
+      "url": "https://github.com/tubtubs/VanillaStoryline/archive/refs/heads/master.zip",
+      "installed": false,
+      "enabled": false
+    },
+    {
+      "id": "mail",
+      "name": "Mail",
+      "author": "shirsig",
+      "category": "Utility",
+      "description": "Quality-of-life improvements for the Vanilla WoW mailbox.",
+      "version": "source",
+      "url": "https://github.com/shirsig/Mail/archive/refs/heads/master.zip",
+      "installed": false,
+      "enabled": false
+    }
+  ]
+}

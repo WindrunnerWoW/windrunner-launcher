@@ -1,0 +1,65 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Color x:Key="BgColor">#070605</Color>
+  <Color x:Key="MetalDark">#100C0A</Color>
+  <Color x:Key="MetalMid">#1A1510</Color>
+  <Color x:Key="TextColor">#F3E6C8</Color>
+  <Color x:Key="MutedColor">#A89878</Color>
+  <Color x:Key="AccentColor">#E4C36A</Color>
+  <Color x:Key="Accent2Color">#9A7040</Color>
+  <Color x:Key="BorderColor">#6E5638</Color>
+  <Color x:Key="SuccessColor">#6FCF5A</Color>
+  <Color x:Key="WarningColor">#E0A84A</Color>
+  <Color x:Key="DangerColor">#C56854</Color>
+  <Color x:Key="ParchmentInk">#2A1E14</Color>
+  <Color x:Key="ParchmentMuted">#6A5640</Color>
+  <Color x:Key="NavIdle">#B8A88A</Color>
+  <Color x:Key="PlayRed">#7A1E16</Color>
+
+  <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}" />
+  <SolidColorBrush x:Key="PanelBrush" Color="{StaticResource MetalMid}" />
+  <SolidColorBrush x:Key="Panel2Brush" Color="#221C16" />
+  <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}" />
+  <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedColor}" />
+  <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+  <SolidColorBrush x:Key="Accent2Brush" Color="{StaticResource Accent2Color}" />
+  <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
+  <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
+  <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
+  <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}" />
+  <SolidColorBrush x:Key="ParchmentInkBrush" Color="{StaticResource ParchmentInk}" />
+  <SolidColorBrush x:Key="ParchmentMutedBrush" Color="{StaticResource ParchmentMuted}" />
+  <SolidColorBrush x:Key="PlayRedBrush" Color="{StaticResource PlayRed}" />
+  <SolidColorBrush x:Key="NavIdleBrush" Color="{StaticResource NavIdle}" />
+
+  <LinearGradientBrush x:Key="GoldEdgeBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Color="#F3D27A" Offset="0" />
+    <GradientStop Color="#A97832" Offset="0.55" />
+    <GradientStop Color="#6A4C1E" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="GoldBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Color="#F4D98C" Offset="0" />
+    <GradientStop Color="#D7A84A" Offset="0.45" />
+    <GradientStop Color="#8F6327" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="ChromeBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Color="#2A231C" Offset="0" />
+    <GradientStop Color="#16120E" Offset="0.5" />
+    <GradientStop Color="#0F0C0A" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="StoneBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Color="#3A2F24" Offset="0" />
+    <GradientStop Color="#241C16" Offset="0.48" />
+    <GradientStop Color="#16110D" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="WindowBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Color="#1C1611" Offset="0" />
+    <GradientStop Color="#100E0C" Offset="0.55" />
+    <GradientStop Color="#0A0908" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="PlayFillBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Color="#B43328" Offset="0" />
+    <GradientStop Color="#7A1E16" Offset="0.45" />
+    <GradientStop Color="#4A100C" Offset="1" />
+  </LinearGradientBrush>
+</ResourceDictionary>

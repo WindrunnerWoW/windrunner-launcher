@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="using:WindrunnerLauncher.Core.Models"
+             x:Class="WindrunnerLauncher.App.Controls.RealmSelector"
+             x:Name="Root">
+  <StackPanel Spacing="5" HorizontalAlignment="Stretch">
+    <TextBlock Text="{Binding Header, ElementName=Root}"
+               Classes="eyebrow"
+               FontSize="10"
+               LetterSpacing="1.8"
+               Margin="4,0,0,0" />
+    <Border Classes="realm-shell">
+      <Grid ColumnDefinitions="*,Auto,40,40">
+        <ComboBox Classes="realm-select"
+                  BorderThickness="0"
+                  Background="Transparent"
+                  MinHeight="38"
+                  Height="38"
+                  Padding="10,0"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Center"
+                  HorizontalContentAlignment="Left"
+                  VerticalContentAlignment="Center"
+                  ItemsSource="{Binding ItemsSource, ElementName=Root}"
+                  SelectedItem="{Binding SelectedItem, ElementName=Root}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="models:RealmEntry">
+              <TextBlock Text="{Binding DisplayName}"
+                         FontFamily="{StaticResource UiFont}"
+                         FontSize="14"
+                         Foreground="{DynamicResource AppTextBrush}"
+                         VerticalAlignment="Center"
+                         TextWrapping="NoWrap"
+                         TextTrimming="CharacterEllipsis" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" Margin="0,0,10,0" VerticalAlignment="Center">
+          <Ellipse Classes="realm-state-dot"
+                   Width="7" Height="7" VerticalAlignment="Center"
+                   Classes.ok="{Binding IsStateOk, ElementName=Root}"
+                   Classes.warn="{Binding IsStateWarn, ElementName=Root}"
+                   Classes.bad="{Binding IsStateBad, ElementName=Root}"
+                   Classes.muted="{Binding IsStateMuted, ElementName=Root}" />
+          <TextBlock Text="{Binding StateText, ElementName=Root}"
+                     Classes="realm-state"
+                     VerticalAlignment="Center"
+                     TextWrapping="NoWrap"
+                     Classes.ok="{Binding IsStateOk, ElementName=Root}"
+                     Classes.warn="{Binding IsStateWarn, ElementName=Root}"
+                     Classes.bad="{Binding IsStateBad, ElementName=Root}"
+                     Classes.muted="{Binding IsStateMuted, ElementName=Root}" />
+        </StackPanel>
+
+        <Button Grid.Column="2"
+                Classes="realm-action realm-add"
+                Command="{Binding AddCommand, ElementName=Root}"
+                ToolTip.Tip="Add realm"
+                Content="+" />
+
+        <Button Grid.Column="3"
+                Classes="realm-action realm-edit"
+                Command="{Binding EditCommand, ElementName=Root}"
+                ToolTip.Tip="Edit selected realm">
+          <Image Source="/Assets/Controls/dropdown_gear.png" Width="16" Height="16" Stretch="Uniform" />
+        </Button>
+      </Grid>
+    </Border>
+  </StackPanel>
+</UserControl>

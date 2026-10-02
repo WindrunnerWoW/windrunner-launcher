@@ -1,0 +1,7 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <FontFamily x:Key="DisplayFont">avares://WindrunnerLauncher/Assets/Fonts/Cinzel-Regular.ttf#Cinzel,avares://WindrunnerLauncher/Assets/Fonts/Cinzel-SemiBold.ttf#Cinzel,avares://WindrunnerLauncher/Assets/Fonts/Cinzel-Bold.ttf#Cinzel</FontFamily>
+  <FontFamily x:Key="BodyFont">avares://WindrunnerLauncher/Assets/Fonts/EBGaramond-Regular.ttf#EB Garamond,avares://WindrunnerLauncher/Assets/Fonts/EBGaramond-SemiBold.ttf#EB Garamond</FontFamily>
+  <FontFamily x:Key="ParchmentFont">avares://WindrunnerLauncher/Assets/Fonts/EBGaramond-Regular.ttf#EB Garamond,avares://WindrunnerLauncher/Assets/Fonts/EBGaramond-SemiBold.ttf#EB Garamond</FontFamily>
+  <FontFamily x:Key="UiFont">avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
+</ResourceDictionary>

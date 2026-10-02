@@ -1,0 +1,199 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls">
+
+  <Style Selector="controls|ParchmentPanel">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{DynamicResource AppPanelBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="7"
+                Padding="{TemplateBinding ContentPadding}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+
+  <Style Selector="controls|NavigationButton">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="Foreground" Value="{DynamicResource AppNavIdleBrush}" />
+    <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}"
+                MinWidth="80"
+                MinHeight="44"
+                Padding="{TemplateBinding Padding}">
+          <Grid>
+            <TextBlock Text="{TemplateBinding Label}"
+                       FontFamily="{TemplateBinding FontFamily}"
+                       FontSize="{TemplateBinding FontSize}"
+                       FontWeight="SemiBold"
+                       Foreground="{TemplateBinding Foreground}"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap" />
+            <Border Height="2" Background="#E8912D" CornerRadius="1"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Bottom"
+                    IsVisible="{TemplateBinding IsSelected}" />
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="controls|NavigationButton:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource AppNavHoverBrush}" />
+  </Style>
+  <Style Selector="controls|NavigationButton[IsSelected=True]">
+    <Setter Property="Foreground" Value="#F0A13A" />
+  </Style>
+
+  <Style Selector="controls|StatusIndicator">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
+          <Ellipse x:Name="Dot" Width="8" Height="8" Fill="#777777" VerticalAlignment="Center" />
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Text="{TemplateBinding StateText}"
+                       FontFamily="{StaticResource UiFont}"
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       TextWrapping="NoWrap"
+                       Classes.ok="{TemplateBinding IsOk}"
+                       Classes.warn="{TemplateBinding IsWarn}"
+                       Classes.bad="{TemplateBinding IsBad}" />
+            <TextBlock Text="{TemplateBinding Detail}"
+                       FontSize="12"
+                       Foreground="{DynamicResource AppMutedBrush}"
+                       TextWrapping="NoWrap"
+                       IsVisible="{TemplateBinding HasDetail}" />
+          </StackPanel>
+        </StackPanel>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="controls|StatusIndicator[IsOk=True] /template/ Ellipse#Dot"><Setter Property="Fill" Value="#82CF80" /></Style>
+  <Style Selector="controls|StatusIndicator[IsWarn=True] /template/ Ellipse#Dot"><Setter Property="Fill" Value="#F0A13A" /></Style>
+  <Style Selector="controls|StatusIndicator[IsBad=True] /template/ Ellipse#Dot"><Setter Property="Fill" Value="#E77569" /></Style>
+  <Style Selector="controls|StatusIndicator[IsMuted=True] /template/ Ellipse#Dot"><Setter Property="Fill" Value="#777777" /></Style>
+  <Style Selector="controls|StatusIndicator[IsBusy=True] /template/ Ellipse#Dot">
+    <Style.Animations>
+      <Animation Duration="0:0:1.15" IterationCount="Infinite">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+        <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.3" /></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+  <!-- Every LauncherButton gets a real bordered template; classes only swap brushes/sizing. -->
+  <Style Selector="controls|LauncherButton">
+    <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Padding" Value="14,7" />
+    <Setter Property="Background" Value="{DynamicResource AppRaisedBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+    <Setter Property="BorderBrush" Value="#8A6A3E" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border x:Name="PART_Chrome"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                Padding="{TemplateBinding Padding}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Foreground="{TemplateBinding Foreground}"
+                            FontFamily="{TemplateBinding FontFamily}"
+                            FontSize="{TemplateBinding FontSize}"
+                            FontWeight="{TemplateBinding FontWeight}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                            RecognizesAccessKey="True" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="controls|LauncherButton:pointerover /template/ Border#PART_Chrome">
+    <Setter Property="Background" Value="{DynamicResource AppHoverBrush}" />
+    <Setter Property="BorderBrush" Value="#C4924A" />
+  </Style>
+  <Style Selector="controls|LauncherButton:pressed /template/ Border#PART_Chrome">
+    <Setter Property="Opacity" Value="0.86" />
+  </Style>
+  <Style Selector="controls|LauncherButton:disabled /template/ Border#PART_Chrome">
+    <Setter Property="Opacity" Value="0.45" />
+  </Style>
+
+  <Style Selector="controls|LauncherButton.accent, controls|LauncherButton.realm-save-button">
+    <Setter Property="Background" Value="{DynamicResource AppAccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentForegroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBrush}" />
+  </Style>
+  <Style Selector="controls|LauncherButton.accent:pointerover /template/ Border#PART_Chrome, controls|LauncherButton.realm-save-button:pointerover /template/ Border#PART_Chrome">
+    <Setter Property="Background" Value="{DynamicResource AppAccentHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccentHoverBrush}" />
+  </Style>
+
+  <Style Selector="controls|LauncherButton.danger">
+    <Setter Property="Background" Value="#3A1C1A" />
+    <Setter Property="Foreground" Value="#F0B7B1" />
+    <Setter Property="BorderBrush" Value="#B95854" />
+  </Style>
+  <Style Selector="controls|LauncherButton.danger:pointerover /template/ Border#PART_Chrome">
+    <Setter Property="Background" Value="#5A2724" />
+    <Setter Property="BorderBrush" Value="#E77569" />
+  </Style>
+  <Style Selector=":light controls|LauncherButton.danger">
+    <Setter Property="Background" Value="#F6E1DF" />
+    <Setter Property="Foreground" Value="#9A2F2A" />
+  </Style>
+  <Style Selector=":light controls|LauncherButton.danger:pointerover /template/ Border#PART_Chrome">
+    <Setter Property="Background" Value="#EFCBC7" />
+  </Style>
+
+  <Style Selector="controls|LauncherButton.dialog-secondary, controls|LauncherButton.realm-save-button">
+    <Setter Property="MinWidth" Value="118" />
+    <Setter Property="Height" Value="36" />
+    <Setter Property="Padding" Value="16,0" />
+    <Setter Property="CornerRadius" Value="8" />
+  </Style>
+  <Style Selector="controls|LauncherButton.dialog-secondary">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
+  </Style>
+
+  <Style Selector="controls|LauncherButton.server-action">
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="36" />
+    <Setter Property="Padding" Value="8,8" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+  </Style>
+
+  <Style Selector="ComboBox.realm-select">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+    <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="MinHeight" Value="38" />
+    <Setter Property="Height" Value="38" />
+    <Setter Property="Padding" Value="10,0" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="Background" Value="{DynamicResource AppInputBrush}" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+</Styles>

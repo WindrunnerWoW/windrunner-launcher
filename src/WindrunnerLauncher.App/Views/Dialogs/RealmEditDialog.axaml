@@ -1,0 +1,55 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WindrunnerLauncher.App.ViewModels"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.Dialogs.RealmEditDialog"
+        x:DataType="vm:RealmEditViewModel"
+        Title="{Binding DialogTitle}"
+        Width="560"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent">
+  <Border Margin="18" Classes="realm-dialog-surface">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14" Margin="22,16,22,18">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="{Binding DialogTitle}" Classes="realm-dialog-title" />
+          <TextBlock Text="Connect a client profile to any compatible Vanilla realm."
+                     Classes="realm-dialog-subtitle" />
+        </StackPanel>
+        <Button Grid.Column="1" Classes="realm-dialog-close" Content="×"
+                Click="CloseClicked" ToolTip.Tip="Close" />
+      </Grid>
+
+      <Border Grid.Row="1" Classes="realm-dialog-rule" />
+
+      <Grid Grid.Row="2" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14">
+        <StackPanel Spacing="6">
+          <TextBlock Text="DISPLAY NAME" Classes="realm-field-label" />
+          <TextBox Classes="realm-field" Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
+                   Watermark="Windrunner" />
+        </StackPanel>
+        <StackPanel Grid.Row="1" Spacing="6">
+          <TextBlock Text="ADDRESS" Classes="realm-field-label" />
+          <TextBox Classes="realm-field" Text="{Binding Address, UpdateSourceTrigger=PropertyChanged}"
+                   Watermark="logon.example.org" />
+        </StackPanel>
+        <StackPanel Grid.Row="2" Spacing="6">
+          <TextBlock Text="CLIENT DIRECTORY OVERRIDE (OPTIONAL)" Classes="realm-field-label" />
+          <TextBox Classes="realm-field" Text="{Binding ClientDirectory}"
+                   Watermark="Use the default managed client" />
+        </StackPanel>
+        <Border Grid.Row="3" Classes="realm-option-card">
+          <CheckBox Content="Clear WDB cache before launch" IsChecked="{Binding ClearWdb}" />
+        </Border>
+      </Grid>
+
+      <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,0">
+        <controls:LauncherButton Classes="realm-save-button" Content="Save realm"
+                                  Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

@@ -1,0 +1,228 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WindrunnerLauncher.App.ViewModels"
+             xmlns:controls="using:WindrunnerLauncher.App.Controls"
+             x:Class="WindrunnerLauncher.App.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+  <Grid>
+    <Image Source="/Assets/Backgrounds/home_realm.png" Stretch="UniformToFill" Opacity="0.14" />
+    <Border Background="{DynamicResource AppOverlayBrush}" />
+    <Grid RowDefinitions="Auto,*" Margin="18,14,18,14" RowSpacing="12">
+      <StackPanel>
+        <TextBlock Text="{Binding Texts[nav.settings]}" Classes="heading" />
+        <TextBlock Text="Launcher behavior, identity, updates, and recovery" Classes="muted" />
+      </StackPanel>
+
+      <ScrollViewer Grid.Row="1">
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+          <StackPanel Grid.Column="0" Spacing="14">
+            <controls:ParchmentPanel>
+              <StackPanel Spacing="12">
+                <TextBlock Text="Appearance &amp; language" Classes="subheading" />
+                <Grid ColumnDefinitions="140,*" ColumnSpacing="12">
+                  <TextBlock Text="{Binding Texts[settings.language]}" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1" Classes="realm-select" ItemsSource="{Binding Languages}"
+                            SelectedItem="{Binding SelectedLanguage}" />
+                </Grid>
+                <Separator />
+                <StackPanel Spacing="4">
+                  <ToggleSwitch Content="{Binding Texts[settings.branding]}"
+                                IsChecked="{Binding ShowBranding}" />
+                  <TextBlock Text="When hidden, the header logo is omitted."
+                             FontSize="12" Classes="muted" />
+                </StackPanel>
+                <StackPanel Spacing="4">
+                  <ToggleSwitch Content="{Binding Texts[settings.light]}"
+                                IsChecked="{Binding LightMode, Mode=TwoWay}" />
+                  <TextBlock Text="Use a brighter, neutral interface for daytime play."
+                             FontSize="12" Classes="muted" />
+                </StackPanel>
+                <Separator />
+                <StackPanel Spacing="8">
+                  <TextBlock Text="Home background" Classes="eyebrow" />
+                  <TextBlock Text="Pick a bundled scene or choose your own image."
+                             Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                  <ItemsControl ItemsSource="{Binding BackgroundOptions}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:BackgroundOptionViewModel">
+                        <Button Classes="background-option" Command="{Binding SelectCommand}"
+                                Margin="0,0,8,8" ToolTip.Tip="{Binding Title}">
+                          <StackPanel Spacing="4" Width="108">
+                            <Border Width="108" Height="64" Classes="background-thumb"
+                                    Classes.selected="{Binding IsSelected}">
+                              <Image Source="{Binding Preview}" Stretch="UniformToFill" />
+                            </Border>
+                            <TextBlock Text="{Binding Title}" Classes="muted" FontSize="11"
+                                       TextAlignment="Center" TextTrimming="CharacterEllipsis" />
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Text="{Binding HomeBackgroundPath}" Classes="muted" FontSize="12" TextTrimming="CharacterEllipsis" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <controls:LauncherButton Content="Choose image…" Click="ChooseBackgroundClicked" />
+                    <controls:LauncherButton Content="Use default" Click="ResetBackgroundClicked" />
+                  </StackPanel>
+                </StackPanel>
+              </StackPanel>
+            </controls:ParchmentPanel>
+
+            <Border Classes="inset-metal">
+              <StackPanel Spacing="12">
+                <TextBlock Text="Update policy" Classes="subheading" />
+                <StackPanel Spacing="4">
+                  <ToggleSwitch Content="{Binding Texts[settings.updates]}"
+                                IsChecked="{Binding CheckUpdatesOnStartup}" />
+                  <TextBlock Text="Checks the client, server, and launcher versions on startup."
+                             FontSize="12" Classes="muted" />
+                </StackPanel>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                  <controls:LauncherButton Classes="accent"
+                                           Content="{Binding Texts[settings.check.now]}"
+                                           Command="{Binding CheckUpdatesCommand}" />
+                  <TextBlock Grid.Column="1" Text="{Binding CurrentLauncherVersionText}"
+                             Classes="muted" FontSize="12" VerticalAlignment="Center" />
+                </Grid>
+
+                <Border Classes="realm-shell" Padding="12" IsVisible="{Binding LauncherUpdateAvailable}">
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="{Binding LauncherUpdateVersionText}" FontWeight="SemiBold" />
+                    <controls:LauncherButton Classes="accent" HorizontalAlignment="Left"
+                                             Content="Download &amp; install"
+                                             Command="{Binding InstallLauncherUpdateCommand}"
+                                             IsEnabled="{Binding CanInstallLauncherUpdate}" />
+                    <TextBlock Text="{Binding LauncherUpdateStatus}" Classes="muted" FontSize="12"
+                               TextWrapping="Wrap" IsVisible="{Binding HasLauncherUpdateStatus}" />
+                  </StackPanel>
+                </Border>
+
+                <Separator />
+                <StackPanel Spacing="4">
+                  <ToggleSwitch Content="{Binding Texts[settings.ignore.server]}"
+                                IsChecked="{Binding IgnoreServerVersion}" />
+                  <TextBlock Text="{Binding IgnoredVersionText}" Classes="muted" FontSize="12" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+
+          <StackPanel Grid.Column="1" Spacing="14">
+            <Border Classes="inset-metal">
+              <StackPanel Spacing="12">
+                <TextBlock Text="Game client" Classes="subheading" />
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Default client folder" Classes="eyebrow" />
+                  <TextBlock Text="{Binding ClientPathText}" FontSize="12"
+                             TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ClientPathText}" />
+                  <TextBlock Text="{Binding ClientPathStatus}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <controls:LauncherButton Classes="accent" Content="Choose folder…" Click="ChooseClientFolderClicked" />
+                  <controls:LauncherButton Content="Use managed client" Command="{Binding UseManagedClientCommand}" />
+                </StackPanel>
+                <TextBlock Text="{Binding ClientPathError}" FontSize="12" TextWrapping="Wrap"
+                           IsVisible="{Binding HasClientPathError}" />
+                <TextBlock Text="The folder is used in place; nothing is copied. Realms with their own client folder keep using it."
+                           Classes="muted" FontSize="12" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="inset-metal">
+              <StackPanel Spacing="12">
+                <TextBlock Text="Client recovery" Classes="subheading" />
+                <TextBlock Text="Repair verifies managed assets and restores only damaged or missing files."
+                           Classes="muted" FontSize="12" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                  <controls:LauncherButton Classes="accent" Content="{Binding Texts[repair.normal]}"
+                                           Command="{Binding RepairCommand}" />
+                  <controls:LauncherButton Grid.Column="1" Classes="danger"
+                                           Content="{Binding Texts[repair.deep]}"
+                                           Command="{Binding DeepRepairCommand}" />
+                </Grid>
+                <TextBlock Text="Deep Repair resets managed client assets and downloads trusted copies again. Personal screenshots, AddOns, and settings are preserved."
+                           Classes="muted" FontSize="12" />
+                <TextBlock Text="{Binding ClientRepairStatus}" FontSize="12"
+                           IsVisible="{Binding HasClientRepairStatus}" />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="inset-metal">
+              <StackPanel Spacing="12">
+                <TextBlock Text="Server recovery" Classes="subheading" />
+                <TextBlock Text="Drops the world database and re-imports it from sql/create_databases.sql and every script in sql/base. Accounts and characters are kept."
+                           Classes="muted" FontSize="12" />
+                <controls:LauncherButton Classes="danger" HorizontalAlignment="Left"
+                                         Content="{Binding Texts[repair.world]}"
+                                         Command="{Binding RepairWorldCommand}"
+                                         IsEnabled="{Binding CanRepairWorld}" />
+                <TextBlock Text="{Binding WorldRepairStatus}" FontSize="12"
+                           IsVisible="{Binding HasWorldRepairStatus}" />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="inset-metal" IsVisible="{Binding ShowWineSettings}">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Run the game with" Classes="subheading" />
+                <ComboBox Classes="realm-select" HorizontalAlignment="Stretch"
+                          ItemsSource="{Binding RunnerModes}"
+                          SelectedIndex="{Binding RunnerModeIndex}" />
+                <TextBlock Text="{Binding RunnerStatusText}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                <StackPanel Spacing="8" IsVisible="{Binding IsCustomRunner}">
+                  <TextBlock Text="A Lutris runner is its wine binary. Proton and GE-Proton can be the proton script or files/bin/wine; umu-run is used when it is installed."
+                             Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                  <TextBox Text="{Binding WineRunnerPath}" Watermark="Path to wine, proton, or umu-run" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <controls:ParchmentPanel>
+              <StackPanel Spacing="10">
+                <TextBlock Text="GitHub sign-in" Classes="subheading" />
+                <TextBlock TextWrapping="Wrap" FontSize="14"
+                           Text="Raises the shared GitHub API limit from 60 to 5,000 requests/hour for update and mod checks. Optional — sign out any time." />
+
+                <StackPanel Spacing="8" IsVisible="{Binding IsGitHubConfigured}">
+                  <TextBlock Text="{Binding GitHubLoginText}" FontWeight="SemiBold" />
+
+                  <Border Classes="realm-shell" Padding="12" IsVisible="{Binding HasGitHubDeviceCode}">
+                    <StackPanel Spacing="4">
+                      <TextBlock Text="Your code" Classes="eyebrow" />
+                      <TextBlock Text="{Binding GitHubDeviceCode}" FontSize="24" FontWeight="Bold"
+                                 LetterSpacing="2" />
+                    </StackPanel>
+                  </Border>
+
+                  <TextBlock Text="{Binding GitHubSignInStatus}" Classes="muted" FontSize="12"
+                             TextWrapping="Wrap" IsVisible="{Binding HasGitHubSignInStatus}" />
+
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <controls:LauncherButton Classes="accent" Content="Sign in with GitHub"
+                                             Command="{Binding SignInWithGitHubCommand}"
+                                             IsVisible="{Binding IsGitHubSignedOut}"
+                                             IsEnabled="{Binding CanStartGitHubSignIn}" />
+                    <controls:LauncherButton Content="Cancel"
+                                             Command="{Binding CancelGitHubSignInCommand}"
+                                             IsVisible="{Binding GitHubSignInInProgress}" />
+                    <controls:LauncherButton Classes="danger" Content="Sign out"
+                                             Command="{Binding SignOutOfGitHubCommand}"
+                                             IsVisible="{Binding IsGitHubSignedIn}" />
+                  </StackPanel>
+                </StackPanel>
+
+                <TextBlock TextWrapping="Wrap" FontSize="12" Classes="muted"
+                           IsVisible="{Binding IsGitHubNotConfigured}"
+                           Text="GitHub sign-in isn't configured for this build (no OAuth Client ID). See docs/auto-updates.md." />
+              </StackPanel>
+            </controls:ParchmentPanel>
+          </StackPanel>
+        </Grid>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</UserControl>

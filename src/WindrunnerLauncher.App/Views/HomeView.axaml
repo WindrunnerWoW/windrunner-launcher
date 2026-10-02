@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WindrunnerLauncher.App.ViewModels"
+             x:Class="WindrunnerLauncher.App.Views.HomeView"
+             x:DataType="vm:HomeViewModel"
+             ClipToBounds="True">
+  <Grid ColumnDefinitions="1.15*,0.85*">
+    <Grid ClipToBounds="True">
+      <Image Source="{Binding BackgroundImage}" Stretch="UniformToFill" />
+      <Border Background="{DynamicResource AppArtFadeBrush}" IsHitTestVisible="False" />
+      <Border Classes="art-top-fade" />
+      <StackPanel VerticalAlignment="Bottom" Margin="42,0,42,38" Spacing="8" MaxWidth="420">
+        <TextBlock Text="{Binding Texts[home.destination]}" Classes="eyebrow hero-muted" />
+        <TextBlock Text="{Binding RealmName}" Classes="hero-title" TextTrimming="CharacterEllipsis" />
+        <TextBlock Text="{Binding RealmAddress}" Classes="hero-muted" FontSize="15" />
+        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,10,0,0">
+          <Border Classes="status-chip" Classes.ready="{Binding ClientChipReady}" Classes.warn="{Binding ClientHasPatchUpdate}">
+            <TextBlock Text="{Binding ClientSummary}" />
+          </Border>
+          <Border Classes="status-chip" Classes.ready="{Binding ServerIsOnline}" Classes.warn="{Binding ServerIsWarning}">
+            <TextBlock Text="{Binding ServerSummary}" />
+          </Border>
+          <Border Classes="status-chip" Classes.warn="{Binding ModsHasWarning}">
+            <TextBlock Text="{Binding ModsSummary}" />
+          </Border>
+        </StackPanel>
+      </StackPanel>
+    </Grid>
+
+    <Border Grid.Column="1" Background="{DynamicResource AppChromeBrush}" BorderThickness="0" Padding="34,28">
+      <Grid RowDefinitions="Auto,*">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,20">
+          <StackPanel Spacing="3">
+            <TextBlock Text="{Binding Texts[home.news]}" Classes="panel-title" />
+            <TextBlock Text="{Binding Texts[home.news.sub]}" Classes="muted" FontSize="13" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="news-link"
+                  Content="{Binding Texts[home.news.viewall]}"
+                  Click="ViewAllClicked" VerticalAlignment="Center" />
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+          <ItemsControl ItemsSource="{Binding NewsItems}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:NewsItem">
+                <Button Classes="news-entry" Click="NewsItemClicked">
+                  <Border Classes="news-item">
+                    <Grid ColumnDefinitions="92,*" ColumnSpacing="16">
+                      <Border Width="92" Height="68" CornerRadius="4" ClipToBounds="True" Background="{DynamicResource AppControlBrush}">
+                        <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                      </Border>
+                      <StackPanel Grid.Column="1" Spacing="3">
+                        <TextBlock Text="{Binding Date}" Classes="eyebrow" />
+                        <TextBlock Text="{Binding Headline}" Classes="news-headline" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="13" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

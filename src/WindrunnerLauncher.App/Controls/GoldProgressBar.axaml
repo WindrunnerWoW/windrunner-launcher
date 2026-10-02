@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="WindrunnerLauncher.App.Controls.GoldProgressBar"
+             x:Name="Root">
+  <Grid RowDefinitions="Auto,6" RowSpacing="5">
+    <TextBlock Text="{Binding Caption, ElementName=Root}"
+               FontSize="11"
+               Foreground="{DynamicResource AppMutedBrush}" />
+    <Border Grid.Row="1"
+            Background="#0D0A08"
+            BorderBrush="#6B553A"
+            BorderThickness="1"
+            CornerRadius="3"
+            Padding="1">
+      <ProgressBar Minimum="0"
+                   Maximum="1"
+                   Value="{Binding Value, ElementName=Root}"
+                   IsIndeterminate="{Binding IsIndeterminate, ElementName=Root}"
+                   Height="4"
+                   Background="#18120D"
+                   Foreground="{StaticResource AccentBrush}" />
+    </Border>
+  </Grid>
+</UserControl>

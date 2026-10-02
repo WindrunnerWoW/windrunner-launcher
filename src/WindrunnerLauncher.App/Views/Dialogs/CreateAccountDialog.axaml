@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.Dialogs.CreateAccountDialog"
+        Title="Create Account"
+        Width="470"
+        Height="340"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent">
+  <Panel>
+    <controls:ParchmentPanel Margin="16" ContentPadding="16">
+      <StackPanel Spacing="12">
+        <TextBlock Text="Create a local realm account" Classes="subheading" />
+        <TextBlock Text="Credentials are sent directly to your local mangosd console."
+                   FontSize="12" Classes="muted" />
+        <StackPanel>
+          <TextBlock Text="USERNAME" Classes="eyebrow" />
+          <TextBox x:Name="UsernameBox" MaxLength="16" />
+        </StackPanel>
+        <StackPanel>
+          <TextBlock Text="PASSWORD" Classes="eyebrow" />
+          <TextBox x:Name="PasswordBox" PasswordChar="●" MaxLength="16" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <controls:LauncherButton Content="Cancel" Click="CancelClicked" />
+          <controls:LauncherButton Classes="accent" Content="Create account" Click="CreateClicked" />
+        </StackPanel>
+      </StackPanel>
+    </controls:ParchmentPanel>
+  </Panel>
+</Window>

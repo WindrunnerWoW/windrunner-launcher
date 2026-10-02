@@ -1,0 +1,404 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp (e.g. 0.1.0). Empty uses the git tag or Directory.Build.props."
+        required: false
+        default: ""
+      prerelease:
+        description: "Mark the GitHub Release as a pre-release"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  prepare:
+    name: Resolve release version and tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve version and tag
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          version="$REQUESTED_VERSION"
+          if [ -z "$version" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+            version="${version#V}"
+          fi
+          if [ -z "$version" ]; then
+            version=$(sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' Directory.Build.props | head -n 1)
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release version: $version" >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="$GITHUB_REF_NAME"
+          elif [ -n "$REQUESTED_VERSION" ]; then
+            tag="v$version"
+          else
+            # Keep existing version tags intact; each automatic main build gets its own release.
+            tag="v$version-build.$GITHUB_RUN_NUMBER"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  release-win-x64:
+    name: NativeAOT win-x64
+    needs: prepare
+    runs-on: windows-latest
+    outputs:
+      aot: ${{ steps.aot.outputs.ok }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore WindrunnerLauncher.sln
+
+      - name: Test
+        run: dotnet test WindrunnerLauncher.sln -c Release --no-restore
+
+      - name: Publish (NativeAOT)
+        # Restore for this RID and build mode; the JIT fallback needs its own restore too.
+        id: aot
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force artifacts/publish | Out-Null
+          dotnet publish src/WindrunnerLauncher.App -c Release -r win-x64 `
+            -p:PublishAot=true `
+            -p:ProductionTrust=true `
+            -p:Version=${{ needs.prepare.outputs.version }} `
+            -o artifacts/publish
+          if ($LASTEXITCODE -ne 0) {
+            "ok=false" >> $env:GITHUB_OUTPUT
+            Write-Host "::warning title=NativeAOT publish failed::Falling back to a self-contained single-file (JIT) publish."
+            exit 1
+          }
+          "ok=true" >> $env:GITHUB_OUTPUT
+
+      - name: Publish (fallback, self-contained single file)
+        if: steps.aot.outcome == 'failure'
+        shell: pwsh
+        run: |
+          if (Test-Path artifacts/publish) { Remove-Item -Recurse -Force artifacts/publish }
+          New-Item -ItemType Directory -Force artifacts/publish | Out-Null
+          dotnet publish src/WindrunnerLauncher.App -c Release -r win-x64 `
+            -p:PublishAot=false `
+            -p:ProductionTrust=true `
+            -p:PublishSingleFile=true `
+            -p:SelfContained=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=${{ needs.prepare.outputs.version }} `
+            -o artifacts/publish
+
+      - name: Stage exe, hashes, and launcher update payload
+        shell: pwsh
+        run: |
+          $nativeAot = "${{ steps.aot.outcome }}" -eq "success"
+          $tag = "${{ needs.prepare.outputs.tag }}"
+          $url = "https://github.com/${{ github.repository }}/releases/download/$tag/WindrunnerLauncher.exe"
+          $notes = if ($nativeAot) { "NativeAOT win-x64 build." } else { "Self-contained JIT fallback; NativeAOT publish failed." }
+          ./scripts/stage-windows-build.ps1 `
+            -SourceDir artifacts/publish `
+            -OutDir artifacts/out `
+            -Version ${{ needs.prepare.outputs.version }} `
+            -Commit ${{ github.sha }} `
+            -NativeAot $nativeAot `
+            -ExeUrl $url `
+            -Notes $notes
+
+      - name: Upload hashed Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-windows
+          path: artifacts/out
+          if-no-files-found: error
+
+  release-linux-x64:
+    name: Linux x64 AppImage
+    needs: prepare
+    runs-on: ubuntu-22.04
+    outputs:
+      aot: ${{ steps.aot.outputs.ok }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install NativeAOT prerequisites
+        run: >
+          sudo apt-get update && sudo apt-get install -y
+          clang zlib1g-dev xvfb libfontconfig1 libxrandr2 libxi6 libxcursor1 libice6 libsm6
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore WindrunnerLauncher.sln
+
+      - name: Test
+        run: dotnet test WindrunnerLauncher.sln -c Release --no-restore
+
+      - name: Publish (NativeAOT)
+        id: aot
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts/publish
+          if dotnet publish src/WindrunnerLauncher.App -c Release -r linux-x64 \
+            -p:PublishAot=true \
+            -p:ProductionTrust=true \
+            -p:Version=${{ needs.prepare.outputs.version }} \
+            -o artifacts/publish; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=NativeAOT publish failed::Falling back to a self-contained single-file (JIT) publish."
+            exit 1
+          fi
+
+      - name: Publish (fallback, self-contained single file)
+        if: steps.aot.outcome == 'failure'
+        run: |
+          rm -rf artifacts/publish
+          mkdir -p artifacts/publish
+          dotnet publish src/WindrunnerLauncher.App -c Release -r linux-x64 \
+            -p:PublishAot=false \
+            -p:ProductionTrust=true \
+            -p:PublishSingleFile=true \
+            -p:SelfContained=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:Version=${{ needs.prepare.outputs.version }} \
+            -o artifacts/publish
+
+      - name: Package and smoke-test AppImage
+        env:
+          SOURCE: artifacts/publish
+          APPIMAGE_OUT: artifacts/appimage/WindrunnerLauncher.AppImage
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          bash scripts/package-appimage.sh
+          bash scripts/test-appimage.sh "$APPIMAGE_OUT"
+
+      - name: Stage AppImage and hashes
+        env:
+          SOURCE: artifacts/appimage
+          OUT: artifacts/linux-out
+          VERSION: ${{ needs.prepare.outputs.version }}
+          COMMIT: ${{ github.sha }}
+          URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/WindrunnerLauncher.AppImage
+          NATIVE_AOT: ${{ steps.aot.outcome == 'success' }}
+          NOTES: Linux x64 AppImage. Data lives in ~/.local/share/windrunner-launcher.
+        run: bash scripts/stage-linux-build.sh
+
+      - name: Upload hashed Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-linux
+          path: artifacts/linux-out
+          if-no-files-found: error
+
+  publish:
+    name: Sign manifest and publish
+    needs: [prepare, release-win-x64, release-linux-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: launcher-windows
+          path: staged/windows
+
+      - name: Download Linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: launcher-linux
+          path: staged/linux
+
+      - name: Merge launcher update payload
+        run: |
+          mkdir -p artifacts/out
+          cp -a staged/windows/. artifacts/out/
+          cp staged/linux/WindrunnerLauncher.AppImage artifacts/out/WindrunnerLauncher.AppImage
+          cp staged/linux/WindrunnerLauncher.AppImage.sha256 artifacts/out/WindrunnerLauncher.AppImage.sha256
+          cp staged/linux/BUILD.txt artifacts/out/BUILD-linux.txt
+          chmod +x artifacts/out/WindrunnerLauncher.AppImage
+          cat staged/linux/SHA256SUMS.txt >> artifacts/out/SHA256SUMS.txt
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          win = json.loads(Path("artifacts/out/launcher.json").read_text(encoding="utf-8"))
+          linux = json.loads(Path("staged/linux/launcher-linux.json").read_text(encoding="utf-8"))
+          win["linuxUrl"] = linux["linuxUrl"]
+          win["linuxSha256"] = linux["linuxSha256"]
+          win["linuxSize"] = linux["linuxSize"]
+          hashes_path = Path("artifacts/out/hashes.json")
+          hashes = json.loads(hashes_path.read_text(encoding="utf-8"))
+          hashes["files"].append({"name": "WindrunnerLauncher.AppImage", "sha256": linux["linuxSha256"], "size": linux["linuxSize"]})
+          hashes_path.write_text(json.dumps(hashes, indent=2) + "\n", encoding="utf-8")
+          notes = []
+          for value in (win.get("notes"), linux.get("notes")):
+              if isinstance(value, str) and value.strip() and value.strip() not in notes:
+                  notes.append(value.strip())
+          if notes:
+              win["notes"] = "\n\n".join(notes)
+          Path("artifacts/out/launcher.json").write_text(json.dumps(win, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Verify merged release artifacts
+        run: |
+          test -s artifacts/out/WindrunnerLauncher.exe
+          test -s artifacts/out/WindrunnerLauncher.AppImage
+          test -s artifacts/out/WindrunnerLauncher.exe.sha256
+          test -s artifacts/out/WindrunnerLauncher.AppImage.sha256
+          test -s artifacts/out/SHA256SUMS.txt
+          test -s artifacts/out/hashes.json
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("artifacts/out")
+          for filename, sidecar in (
+              ("WindrunnerLauncher.exe", "WindrunnerLauncher.exe.sha256"),
+              ("WindrunnerLauncher.AppImage", "WindrunnerLauncher.AppImage.sha256"),
+          ):
+              actual = hashlib.sha256((root / filename).read_bytes()).hexdigest()
+              expected = (root / sidecar).read_text(encoding="utf-8").split()[0].lower()
+              if actual != expected:
+                  raise SystemExit(f"{filename}: sidecar hash does not match")
+
+          hashes = json.loads((root / "hashes.json").read_text(encoding="utf-8"))
+          names = {entry["name"] for entry in hashes.get("files", [])}
+          if not {"WindrunnerLauncher.exe", "WindrunnerLauncher.AppImage"}.issubset(names):
+              raise SystemExit("hashes.json must contain both release downloads")
+          print("Verified Windows and Linux launcher hashes.")
+          PY
+
+      - name: Sign launcher update payload (Ed25519)
+        id: sign
+        env:
+          LAUNCHER_SIGNING_KEY: ${{ secrets.LAUNCHER_SIGNING_KEY }}
+          LAUNCHER_SIGNING_KEY_ID: ${{ secrets.LAUNCHER_SIGNING_KEY_ID }}
+        run: |
+          if [ -z "${LAUNCHER_SIGNING_KEY:-}" ]; then
+            echo "::warning title=Launcher self-update disabled::Set repository secret LAUNCHER_SIGNING_KEY to publish a signed launcher update manifest."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          key_id="${LAUNCHER_SIGNING_KEY_ID:-launcher-1}"
+          key_path="$RUNNER_TEMP/launcher-signing.key"
+          cleanup() { rm -f "$key_path"; }
+          trap cleanup EXIT
+          umask 077
+          printf '%s\n' "$LAUNCHER_SIGNING_KEY" > "$key_path"
+          dotnet run --project tools/sign-manifest -c Release --nologo -- \
+            sign --key "$key_path" --key-id "$key_id" \
+            --in artifacts/out/launcher.json \
+            --out artifacts/out/launcher.manifest.json
+          pub=$(dotnet run --project tools/sign-manifest -c Release --nologo --no-build -- pubkey --key "$key_path" | tail -n 1)
+          dotnet run --project tools/sign-manifest -c Release --nologo --no-build -- \
+            verify --public "$pub" --in artifacts/out/launcher.manifest.json
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Remove unsigned launcher payload
+        run: rm -f artifacts/out/launcher.json
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ needs.prepare.outputs.tag }}"
+          ver="${{ needs.prepare.outputs.version }}"
+          prerelease="${{ github.event.inputs.prerelease }}"
+          sums=$(cat artifacts/out/SHA256SUMS.txt)
+          if [ -f artifacts/out/launcher.manifest.json ]; then
+            manifest_note="Launcher self-update is available through the signed launcher.manifest.json envelope."
+          else
+            manifest_note="Launcher self-update is unavailable until a signing key is configured."
+          fi
+          notes=$(mktemp)
+          cat > "$notes" <<EOF
+          ## Windrunner Launcher $ver
+
+          Windows: portable win-x64 build. Copy WindrunnerLauncher.exe into an empty folder.
+
+          Linux: download WindrunnerLauncher.AppImage, run \`chmod +x WindrunnerLauncher.AppImage\`, then launch it. Game data is stored in \`~/.local/share/windrunner-launcher\` (or \`\$XDG_DATA_HOME/windrunner-launcher\`). The 1.12 client runs through Wine or Proton.
+
+          Built from commit ${{ github.sha }}.
+
+          ### SHA-256
+
+              $sums
+
+          $manifest_note
+          EOF
+          # The heredoc above keeps the indentation of this script. Strip it.
+          sed -i 's/^          //' "$notes"
+          assets=()
+          while IFS= read -r -d '' file; do
+            assets+=("$file")
+          done < <(find artifacts/out -maxdepth 1 -type f -print0)
+          flags=()
+          if [ "$prerelease" = "true" ]; then
+            flags+=(--prerelease --latest=false)
+          else
+            flags+=(--prerelease=false --latest)
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+            gh release edit "$tag" --draft=false --title "Windrunner Launcher $ver" --notes-file "$notes" "${flags[@]}"
+          else
+            gh release create "$tag" "${assets[@]}" --target "${{ github.sha }}" --title "Windrunner Launcher $ver" --notes-file "$notes" "${flags[@]}"
+          fi
+
+      - name: Summary
+        run: |
+          {
+            echo "### Release ${{ needs.prepare.outputs.tag }}"
+            echo "Windows NativeAOT: ${{ needs.release-win-x64.outputs.aot }}"
+            echo "Linux NativeAOT: ${{ needs.release-linux-x64.outputs.aot }}"
+            echo
+            echo '```'
+            cat artifacts/out/SHA256SUMS.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

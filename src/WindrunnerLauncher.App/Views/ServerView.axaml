@@ -1,0 +1,201 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WindrunnerLauncher.App.ViewModels"
+             xmlns:models="using:WindrunnerLauncher.Core.Models"
+             xmlns:controls="using:WindrunnerLauncher.App.Controls"
+             x:Class="WindrunnerLauncher.App.Views.ServerView"
+             x:DataType="vm:ServerViewModel">
+  <Grid>
+    <Image Source="/Assets/Backgrounds/home_realm.png" Stretch="UniformToFill" Opacity="0.14" />
+    <Border Background="{DynamicResource AppOverlayBrush}" />
+    <Grid RowDefinitions="Auto,*" Margin="18,14,18,14" RowSpacing="12">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+        <StackPanel>
+          <TextBlock Text="{Binding Texts[nav.server]}" Classes="heading" />
+          <TextBlock Text="{Binding StateDetail}" Classes="muted" />
+        </StackPanel>
+        <TextBlock Grid.Column="1" Text="{Binding StateText}" FontWeight="SemiBold" VerticalAlignment="Center"
+                   Foreground="{StaticResource AccentBrush}" />
+      </Grid>
+
+      <Grid Grid.Row="1" ColumnDefinitions="1.65*,1*" ColumnSpacing="14">
+        <Border Classes="inset-metal" Padding="12">
+          <Grid RowDefinitions="Auto,*" RowSpacing="10">
+            <StackPanel Orientation="Horizontal" Spacing="0">
+              <controls:NavigationButton Label="{Binding Texts[server.mariadb]}"
+                                         IsSelected="{Binding IsMariaDbSelected}"
+                                         Command="{Binding SelectConsoleCommand}"
+                                         CommandParameter="mariadb" />
+              <controls:NavigationButton Label="{Binding Texts[server.realmd]}"
+                                         IsSelected="{Binding IsRealmdSelected}"
+                                         Command="{Binding SelectConsoleCommand}"
+                                         CommandParameter="realmd" />
+              <controls:NavigationButton Label="{Binding Texts[server.console]}"
+                                         IsSelected="{Binding IsWorldSelected}"
+                                         Command="{Binding SelectConsoleCommand}"
+                                         CommandParameter="world" />
+            </StackPanel>
+
+            <Grid Grid.Row="1">
+              <Border Background="#0B0908" BorderBrush="#6A5235" BorderThickness="1" Padding="12"
+                      IsVisible="{Binding IsMariaDbSelected}">
+                <ScrollViewer>
+                  <TextBlock FontFamily="monospace" Foreground="#B8C9A3" Text="{Binding MariaDbLog}" />
+                </ScrollViewer>
+              </Border>
+              <Border Background="#0B0908" BorderBrush="#6A5235" BorderThickness="1" Padding="12"
+                      IsVisible="{Binding IsRealmdSelected}">
+                <ScrollViewer>
+                  <TextBlock FontFamily="monospace" Foreground="#B8C9A3" Text="{Binding RealmdLog}" />
+                </ScrollViewer>
+              </Border>
+              <Grid IsVisible="{Binding IsWorldSelected}" RowDefinitions="*,Auto" RowSpacing="8">
+                <Border Background="#0B0908" BorderBrush="#6A5235" BorderThickness="1" Padding="12">
+                  <ScrollViewer>
+                    <TextBlock FontFamily="monospace" Foreground="#D0C7B1" Text="{Binding MangosdLog}" />
+                  </ScrollViewer>
+                </Border>
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBox Watermark="Enter mangosd command…"
+                           Text="{Binding ConsoleCommand}"
+                           AcceptsReturn="False" />
+                  <controls:LauncherButton Grid.Column="1" Classes="accent" Content="Send"
+                                           Command="{Binding SendConsoleCommandCommand}"
+                                           IsEnabled="{Binding CanSendConsoleCommand}" />
+                </Grid>
+              </Grid>
+            </Grid>
+          </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Column="1">
+          <StackPanel Spacing="12">
+            <Border Classes="inset-metal" Padding="14">
+              <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="*,*">
+                  <StackPanel Margin="0,0,5,0">
+                    <TextBlock Text="REALM NAME" Classes="eyebrow" />
+                    <TextBox Text="{Binding RealmName}" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" Margin="5,0,0,0">
+                    <TextBlock Text="ADDRESS" Classes="eyebrow" />
+                    <TextBox Text="{Binding RealmAddress}" />
+                  </StackPanel>
+                </Grid>
+                <StackPanel>
+                  <TextBlock Text="MYSQL PORT" Classes="eyebrow" />
+                  <NumericUpDown Value="{Binding MysqlPort}" Minimum="1" Maximum="65535" />
+                </StackPanel>
+                <ToggleSwitch Content="Start server with client" IsChecked="{Binding StartWithClient}" />
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                  <controls:LauncherButton Classes="server-action" Content="{Binding Texts[server.account.create]}"
+                                           Command="{Binding CreateAccountCommand}" IsEnabled="{Binding CanCreateAccount}" />
+                  <controls:LauncherButton Grid.Column="1" Classes="server-action" Content="{Binding Texts[server.account.password]}"
+                                           Command="{Binding ChangePasswordCommand}" IsEnabled="{Binding CanManageAccounts}" />
+                  <controls:LauncherButton Grid.Row="1" Classes="server-action" Content="{Binding Texts[server.account.gmlevel]}"
+                                           Command="{Binding ChangeGmLevelCommand}" IsEnabled="{Binding CanManageAccounts}" />
+                  <controls:LauncherButton Grid.Row="1" Grid.Column="1" Classes="server-action accent" Content="{Binding StartStopLabel}"
+                                           Command="{Binding StartStopCommand}" IsEnabled="{Binding CanStartStop}" />
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="inset-metal" Padding="14" IsVisible="{Binding IsInstalled}">
+              <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{Binding Texts[server.update.title]}" Classes="eyebrow" VerticalAlignment="Center" />
+                  <Border Grid.Column="1" Classes="update-badge" IsVisible="{Binding HasServerUpdate}">
+                    <TextBlock Text="{Binding Texts[server.update.new]}" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Classes="ok" FontSize="11" FontWeight="SemiBold"
+                             Text="{Binding Texts[server.update.uptodate]}" IsVisible="{Binding IsServerUpToDate}" />
+                  <TextBlock Grid.Column="1" Classes="muted" FontSize="11" FontWeight="SemiBold"
+                             Text="{Binding Texts[server.update.skipped]}" IsVisible="{Binding IsServerUpdateSkipped}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,*">
+                  <StackPanel>
+                    <TextBlock Text="{Binding Texts[server.update.installed]}" Classes="muted" FontSize="11" />
+                    <TextBlock Text="{Binding InstalledVersionText}" FontSize="15" FontWeight="SemiBold" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="1">
+                    <TextBlock Text="{Binding Texts[server.update.latest]}" Classes="muted" FontSize="11" />
+                    <TextBlock Text="{Binding LatestVersionText}" FontSize="15" FontWeight="SemiBold"
+                               Classes.update-title="{Binding HasServerUpdate}" />
+                  </StackPanel>
+                </Grid>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                  <controls:LauncherButton Classes="server-action accent" Content="{Binding Texts[server.update.update]}"
+                                           Command="{Binding UpdateServerCommand}" IsEnabled="{Binding CanUpdateServer}" />
+                  <controls:LauncherButton Grid.Column="1" Classes="server-action" Content="{Binding CheckServerUpdateLabel}"
+                                           Command="{Binding CheckServerUpdateCommand}" IsEnabled="{Binding CanCheckServerUpdate}" />
+                </Grid>
+                <StackPanel Spacing="4" IsVisible="{Binding HasServerRollback}">
+                  <controls:LauncherButton Classes="server-action danger" Content="{Binding Texts[server.update.restore]}"
+                                           Command="{Binding RestoreServerCommand}" IsEnabled="{Binding CanRestoreServer}" />
+                  <TextBlock Text="{Binding RollbackHint}" Classes="muted" FontSize="11" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="inset-metal" Padding="14" IsVisible="{Binding IsInstalled}">
+              <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{Binding Texts[server.backup.title]}" Classes="eyebrow" VerticalAlignment="Center" />
+                  <Button Grid.Column="1" Classes="news-link" Content="{Binding Texts[server.backup.open]}"
+                          Command="{Binding OpenBackupsCommand}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                  <controls:LauncherButton Classes="server-action" Content="{Binding Texts[server.backup.full]}"
+                                           ToolTip.Tip="{Binding Texts[server.backup.full.tip]}"
+                                           Command="{Binding BackupFullCommand}" IsEnabled="{Binding CanBackup}" />
+                  <controls:LauncherButton Grid.Column="1" Classes="server-action" Content="{Binding Texts[server.backup.characters]}"
+                                           ToolTip.Tip="{Binding Texts[server.backup.characters.tip]}"
+                                           Command="{Binding BackupCharactersCommand}" IsEnabled="{Binding CanBackup}" />
+                </Grid>
+                <TextBlock Text="{Binding BackupStatus}" Classes="ok" FontSize="11" IsVisible="{Binding HasBackupStatus}" />
+                <TextBlock Text="{Binding LastBackupText}" Classes="muted" FontSize="11" />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="inset-metal" Padding="14" IsVisible="{Binding HasSetupProgress}">
+              <StackPanel Spacing="10">
+                <TextBlock Text="{Binding SetupTitle}" Classes="eyebrow" />
+                <controls:GoldProgressBar IsVisible="{Binding IsSetupInProgress}"
+                                          Value="{Binding SetupProgressFraction}"
+                                          Caption="{Binding SetupProgressCaption}" />
+                <ItemsControl ItemsSource="{Binding SetupStages}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:SetupStage">
+                      <Border BorderBrush="#6A5235" BorderThickness="0,0,0,1" Padding="0,6" Margin="0,0,0,4">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="9">
+                          <TextBlock Text="{Binding Glyph}"
+                                     FontSize="12"
+                                     VerticalAlignment="Top"
+                                     Margin="0,1,0,0"
+                                     Foreground="{StaticResource AccentBrush}"
+                                     Classes.ok="{Binding Completed}"
+                                     Classes.bad="{Binding Failed}"
+                                     Classes.muted="{Binding IsPending}" />
+                          <StackPanel Grid.Column="1">
+                            <TextBlock Text="{Binding DisplayName}"
+                                       Classes.muted="{Binding IsDimmed}"
+                                       Classes.bad="{Binding Failed}" />
+                            <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="10"
+                                       IsVisible="{Binding HasDetail}" />
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <controls:LauncherButton Classes="danger" Content="{Binding Texts[server.force.stop]}"
+                                     IsVisible="{Binding IsRunning}" Command="{Binding ForceStopCommand}" />
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </Grid>
+  </Grid>
+</UserControl>

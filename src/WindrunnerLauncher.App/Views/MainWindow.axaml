@@ -1,0 +1,165 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WindrunnerLauncher.App.ViewModels"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{Binding Title}"
+        Icon="/Assets/icon.png"
+        Width="1280"
+        Height="800"
+        MinWidth="960"
+        MinHeight="640"
+        WindowStartupLocation="CenterScreen"
+        CanResize="True"
+        SystemDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        UseLayoutRounding="True">
+  <Panel>
+    <Grid Margin="1">
+    <Border
+            Background="{DynamicResource AppWindowBrush}"
+            CornerRadius="10"
+            ClipToBounds="True">
+      <Grid RowDefinitions="84,*,98">
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,*" Background="{DynamicResource AppChromeBrush}">
+        <Border Grid.ColumnSpan="3" Background="Transparent" PointerPressed="HeaderPointerPressed" />
+
+        <Image Grid.Column="0"
+               Source="/Assets/Branding/windrunner-logo-v1.png"
+               Width="332"
+               Height="82"
+               Margin="18,0,0,0"
+               HorizontalAlignment="Left"
+               VerticalAlignment="Center"
+               Stretch="Uniform"
+               IsHitTestVisible="False"
+               IsVisible="{Binding ShowBranding}" />
+
+        <StackPanel Grid.Column="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="8">
+          <controls:NavigationButton Label="{Binding Texts[nav.home]}" IsSelected="{Binding IsHomeSelected}"
+                                     Command="{Binding NavigateCommand}" CommandParameter="home" />
+          <controls:NavigationButton Label="{Binding Texts[nav.mods]}" IsSelected="{Binding IsModsSelected}"
+                                     Command="{Binding NavigateCommand}" CommandParameter="mods" />
+          <controls:NavigationButton Label="{Binding Texts[nav.server]}" IsSelected="{Binding IsServerSelected}"
+                                     Command="{Binding NavigateCommand}" CommandParameter="server" />
+          <controls:NavigationButton Label="{Binding Texts[nav.settings]}" IsSelected="{Binding IsSettingsSelected}"
+                                     Command="{Binding NavigateCommand}" CommandParameter="settings" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="2"
+                    Orientation="Horizontal"
+                    Spacing="4"
+                    Margin="0,0,16,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center">
+          <Button Classes="window-control" Click="MinimizeClicked" ToolTip.Tip="Minimize">
+            <Rectangle Classes="window-glyph-bar"
+                       Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+          </Button>
+          <Button x:Name="MaximizeButton" Classes="window-control" Click="MaximizeClicked" ToolTip.Tip="Maximize">
+            <Panel Width="10" Height="10">
+              <Rectangle x:Name="MaximizeIcon"
+                         Classes="window-glyph-box"
+                         Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+              <Path x:Name="RestoreIcon"
+                    Classes="window-glyph"
+                    IsVisible="False"
+                    Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                    Data="M 3.4,1.2 H 8.8 V 6.6 M 3.4,1.2 V 3.2 M 1.2,3.2 H 6.8 V 8.8 H 1.2 Z" />
+            </Panel>
+          </Button>
+          <Button Classes="window-control close" Click="CloseClicked" ToolTip.Tip="Close">
+            <Path Classes="window-glyph"
+                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                  Data="M 0,0 L 10,10 M 10,0 L 0,10" />
+          </Button>
+        </StackPanel>
+      </Grid>
+
+      <ContentControl Grid.Row="1"
+                      Content="{Binding CurrentPage}"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Stretch" />
+
+      <Border Grid.Row="2" Background="{DynamicResource AppChromeBrush}" BorderThickness="0">
+        <Grid ColumnDefinitions="500,*,252" ColumnSpacing="24" Margin="28,12">
+          <controls:RealmSelector Header="{Binding Texts[realm.label]}"
+                                  ItemsSource="{Binding Realms}"
+                                  SelectedItem="{Binding SelectedRealm}"
+                                  AddCommand="{Binding AddRealmCommand}"
+                                  EditCommand="{Binding EditRealmCommand}"
+                                  StateText="{Binding LauncherStatusText}"
+                                  IsStateOk="{Binding LauncherStatusIsOk}"
+                                  IsStateWarn="{Binding LauncherStatusIsWarn}"
+                                  IsStateBad="{Binding LauncherStatusIsBad}"
+                                  IsStateMuted="{Binding LauncherStatusIsMuted}"
+                                  VerticalAlignment="Center" />
+
+          <controls:GoldProgressBar Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding HasProgressBar}"
+                                    Value="{Binding ProgressBarValue}"
+                                    IsIndeterminate="{Binding ProgressBarIndeterminate}"
+                                    Caption="{Binding ProgressBarCaption}" />
+
+          <StackPanel Grid.Column="1"
+                      Orientation="Horizontal"
+                      Spacing="4"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      IsVisible="{Binding ShowServerUpdateHint}">
+            <Button Classes="server-update-hint"
+                    Command="{Binding ShowServerUpdateCommand}"
+                    ToolTip.Tip="{Binding Texts[server.update.hint.tip]}">
+              <StackPanel Orientation="Horizontal" Spacing="12">
+                <Border Classes="update-arrow" VerticalAlignment="Center">
+                  <Path Data="M 7,1 L 13,7.5 M 7,1 L 1,7.5 M 7,1 L 7,14"
+                        Stroke="{DynamicResource SuccessBrush}"
+                        StrokeThickness="2.2"
+                        StrokeLineCap="Round"
+                        StrokeJoin="Round"
+                        Width="14"
+                        Height="15"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center" />
+                </Border>
+                <StackPanel VerticalAlignment="Center" Spacing="1">
+                  <TextBlock Classes="update-title" Text="{Binding Texts[server.update.available]}" TextWrapping="NoWrap" />
+                  <TextBlock Classes="muted" FontSize="12" Text="{Binding ServerUpdateVersions}" TextWrapping="NoWrap" />
+                </StackPanel>
+              </StackPanel>
+            </Button>
+            <Button Classes="update-skip"
+                    VerticalAlignment="Center"
+                    Content="{Binding Texts[server.update.skip]}"
+                    ToolTip.Tip="{Binding Texts[server.update.skip.version]}"
+                    Command="{Binding SkipServerUpdateCommand}" />
+          </StackPanel>
+
+          <controls:PlayButton Grid.Column="2"
+                               HorizontalAlignment="Stretch"
+                               VerticalAlignment="Center"
+                               Text="{Binding PlayCaption}"
+                               Hint="{Binding PlayHint}"
+                               IsPlayEnabled="{Binding CanPlay}"
+                               Command="{Binding PlayCommand}" />
+        </Grid>
+      </Border>
+
+      </Grid>
+    </Border>
+    <Border Background="Transparent"
+            BorderBrush="{DynamicResource AppWindowBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="10"
+            IsHitTestVisible="False" />
+    </Grid>
+
+  </Panel>
+</Window>

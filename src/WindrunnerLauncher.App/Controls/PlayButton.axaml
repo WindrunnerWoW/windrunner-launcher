@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="WindrunnerLauncher.App.Controls.PlayButton"
+             x:Name="Root">
+  <Button Classes="primary-action"
+          Height="52"
+          HorizontalAlignment="Stretch"
+          Command="{Binding Command, ElementName=Root}"
+          IsEnabled="{Binding IsPlayEnabled, ElementName=Root}"
+          ToolTip.Tip="{Binding Hint, ElementName=Root}">
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+      <TextBlock Text="▶" FontSize="12" VerticalAlignment="Center" />
+      <TextBlock Text="{Binding Text, ElementName=Root}"
+                 FontFamily="{StaticResource UiFont}"
+                 FontWeight="SemiBold"
+                 FontSize="15"
+                 LetterSpacing="1.8"
+                 TextWrapping="NoWrap" />
+    </StackPanel>
+  </Button>
+</UserControl>

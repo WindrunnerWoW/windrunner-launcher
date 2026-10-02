@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  test:
+    name: Test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore WindrunnerLauncher.sln
+
+      - name: Build Core + tests
+        run: dotnet build tests/WindrunnerLauncher.Core.Tests -c Release --no-restore
+
+      - name: Test
+        run: >
+          dotnet test tests/WindrunnerLauncher.Core.Tests -c Release --no-build
+          --logger "trx;LogFileName=core-tests.trx"
+          --results-directory artifacts/test-results
+
+      - name: Test App view models
+        run: >
+          dotnet test tests/WindrunnerLauncher.App.Tests -c Release --no-restore
+          --logger "trx;LogFileName=app-tests.trx"
+          --results-directory artifacts/test-results
+
+      - name: Build App (JIT, no AOT)
+        run: dotnet build src/WindrunnerLauncher.App -c Release --no-restore -p:PublishAot=false
+
+      - name: Publish App (linux-x64, JIT)
+        # Publish must restore for its RID and publish properties; solution restore is framework-only.
+        run: >
+          dotnet publish src/WindrunnerLauncher.App -c Release -r linux-x64
+          -p:PublishAot=false -p:SelfContained=true
+          -o artifacts/linux-publish
+
+      - name: Build sign-manifest tool
+        run: dotnet build tools/sign-manifest -c Release --no-restore
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: artifacts/test-results
+          if-no-files-found: ignore
+
+  windows-build:
+    name: Windows win-x64 build + SHA-256
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $props = Get-Content Directory.Build.props -Raw
+          if ($props -notmatch "<Version>([^<]+)</Version>") { throw "Directory.Build.props has no <Version>." }
+          $v = $Matches[1]
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "short_sha=$($env:GITHUB_SHA.Substring(0, 7))" >> $env:GITHUB_OUTPUT
+
+      - name: Restore
+        run: dotnet restore WindrunnerLauncher.sln
+
+      - name: Test
+        run: dotnet test tests/WindrunnerLauncher.Core.Tests -c Release --no-restore
+
+      - name: Publish (NativeAOT)
+        id: aot
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force artifacts/publish | Out-Null
+          dotnet publish src/WindrunnerLauncher.App -c Release -r win-x64 `
+            -p:PublishAot=true `
+            -p:ProductionTrust=true `
+            -p:Version=${{ steps.version.outputs.version }} `
+            -o artifacts/publish
+          if ($LASTEXITCODE -ne 0) {
+            "ok=false" >> $env:GITHUB_OUTPUT
+            Write-Host "::warning title=NativeAOT publish failed::Falling back to a self-contained single-file (JIT) publish."
+            exit 1
+          }
+          "ok=true" >> $env:GITHUB_OUTPUT
+
+      - name: Publish (fallback, self-contained single file)
+        if: steps.aot.outcome == 'failure'
+        shell: pwsh
+        run: |
+          if (Test-Path artifacts/publish) { Remove-Item -Recurse -Force artifacts/publish }
+          New-Item -ItemType Directory -Force artifacts/publish | Out-Null
+          dotnet publish src/WindrunnerLauncher.App -c Release -r win-x64 `
+            -p:PublishAot=false `
+            -p:ProductionTrust=true `
+            -p:PublishSingleFile=true `
+            -p:SelfContained=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=${{ steps.version.outputs.version }} `
+            -o artifacts/publish
+
+      - name: Stage exe and SHA-256
+        shell: pwsh
+        run: |
+          $nativeAot = "${{ steps.aot.outcome }}" -eq "success"
+          ./scripts/stage-windows-build.ps1 `
+            -SourceDir artifacts/publish `
+            -OutDir artifacts/out `
+            -Version ${{ steps.version.outputs.version }} `
+            -Commit ${{ github.sha }} `
+            -NativeAot $nativeAot
+
+      - name: Upload hashed Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindrunnerLauncher-win-x64-${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}${{ steps.aot.outcome == 'success' && '' || '-NOAOT' }}
+          path: artifacts/out
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summary
+        shell: pwsh
+        env:
+          AOT_OUTCOME: ${{ steps.aot.outcome }}
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_SHA: ${{ github.sha }}
+        run: |
+          # Do not wrap interpolated values in markdown backticks inside a
+          # double-quoted PowerShell string: ` is the escape character, so
+          # `0.1.0` is a null + unclosed quote (version 0.x).
+          $title = if ($env:AOT_OUTCOME -eq 'success') {
+            '### NativeAOT win-x64 build succeeded'
+          } else {
+            '### NativeAOT failed — self-contained JIT fallback uploaded'
+          }
+          $sums = (Get-Content artifacts/out/SHA256SUMS.txt -Raw).Trim()
+          $fence = [string]::new([char]96, 3)
+          $md = @(
+            $title
+            "Version $($env:BUILD_VERSION) · $($env:BUILD_SHA)"
+            ''
+            'SHA-256:'
+            $fence
+            $sums
+            $fence
+          ) -join [Environment]::NewLine
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $md

@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.Dialogs.ChangeGmLevelDialog"
+        Title="Change GM Level"
+        Width="470"
+        Height="340"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent">
+  <Panel>
+    <controls:ParchmentPanel Margin="16" ContentPadding="16">
+      <StackPanel Spacing="12">
+        <TextBlock Text="Change a local GM level" Classes="subheading" />
+        <TextBlock Text="The account must already exist. Its password is left unchanged."
+                   FontSize="12" Classes="muted" />
+        <StackPanel>
+          <TextBlock Text="USERNAME" Classes="eyebrow" />
+          <TextBox x:Name="UsernameBox" MaxLength="16" />
+        </StackPanel>
+        <StackPanel>
+          <TextBlock Text="GM LEVEL" Classes="eyebrow" />
+          <ComboBox x:Name="GmBox" SelectedIndex="0" HorizontalAlignment="Stretch">
+            <ComboBoxItem Content="0 — Player" />
+            <ComboBoxItem Content="1 — Moderator" />
+            <ComboBoxItem Content="2 — Game Master" />
+            <ComboBoxItem Content="3 — Administrator" />
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <controls:LauncherButton Content="Cancel" Click="CancelClicked" />
+          <controls:LauncherButton Classes="accent" Content="Change GM level" Click="SaveClicked" />
+        </StackPanel>
+      </StackPanel>
+    </controls:ParchmentPanel>
+  </Panel>
+</Window>

@@ -1,0 +1,51 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WindrunnerLauncher.App.ViewModels"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.Dialogs.AddAddonDialog"
+        x:DataType="vm:AddonsViewModel"
+        Title="Add addon"
+        Width="520"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent">
+  <Border Margin="18" Classes="realm-dialog-surface">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14" Margin="22,16,22,18">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="Add addon" Classes="realm-dialog-title" />
+          <TextBlock Text="A GitHub or Codeberg link tracks that repo's latest release; anything else is a fixed download."
+                     Classes="realm-dialog-subtitle" TextWrapping="Wrap" />
+        </StackPanel>
+        <Button Grid.Column="1" Classes="realm-dialog-close" Content="&#215;"
+                Click="CancelClicked" ToolTip.Tip="Close" />
+      </Grid>
+
+      <Border Grid.Row="1" Classes="realm-dialog-rule" />
+
+      <Grid Grid.Row="2" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14">
+        <StackPanel Spacing="6">
+          <TextBlock Text="URL" Classes="realm-field-label" />
+          <TextBox Classes="realm-field" Watermark="github.com/owner/repo, or a direct download link..."
+                   Text="{Binding NewAddonUrl, UpdateSourceTrigger=PropertyChanged}"
+                   IsEnabled="{Binding !IsAddingAddon}" />
+        </StackPanel>
+        <StackPanel Grid.Row="1" Spacing="6">
+          <TextBlock Text="ASSET FILTER (OPTIONAL)" Classes="realm-field-label" />
+          <TextBox Classes="realm-field" Watermark="e.g. an asset name fragment such as 1.12 - narrows a release with several files down to one"
+                   Text="{Binding NewAddonFilter, UpdateSourceTrigger=PropertyChanged}"
+                   IsEnabled="{Binding !IsAddingAddon}" />
+        </StackPanel>
+        <TextBlock Grid.Row="2" Text="{Binding AddAddonError}" IsVisible="{Binding HasAddAddonError}"
+                   Foreground="#9A2F2A" FontSize="12" TextWrapping="Wrap" />
+      </Grid>
+
+      <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,2,0,0">
+        <controls:LauncherButton Content="Cancel" Click="CancelClicked" IsEnabled="{Binding !IsAddingAddon}" />
+        <controls:LauncherButton Classes="accent" Content="Add" Click="AddClicked" IsEnabled="{Binding !IsAddingAddon}" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

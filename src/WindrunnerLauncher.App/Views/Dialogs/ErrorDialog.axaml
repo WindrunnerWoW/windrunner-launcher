@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.Dialogs.ErrorDialog"
+        Title="Error"
+        Width="480"
+        Height="280"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent">
+  <Panel>
+    <Border Classes="dialog-surface" Margin="16" Padding="18">
+      <Grid RowDefinitions="Auto,*,Auto" RowSpacing="13">
+        <TextBlock x:Name="TitleText" Classes="subheading" />
+        <ScrollViewer Grid.Row="1">
+          <TextBlock x:Name="DetailText" Classes="muted" />
+        </ScrollViewer>
+        <controls:LauncherButton Grid.Row="2" Classes="accent" HorizontalAlignment="Right"
+                                 Content="Close" Click="CloseClicked" />
+      </Grid>
+    </Border>
+  </Panel>
+</Window>

@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.Dialogs.ForceStopDialog"
+        Title="Force Stop Server"
+        Width="520"
+        Height="260"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent">
+  <Panel>
+    <Border Classes="dialog-surface" Margin="16" Padding="18">
+      <Grid RowDefinitions="Auto,*,Auto" RowSpacing="14">
+        <TextBlock Text="Force stop the local server?" Classes="subheading" />
+        <TextBlock Grid.Row="1"
+                   Text="The world process will be terminated immediately. Unsaved world state may be lost. Use this only when a normal stop cannot finish."
+                   Classes="muted" />
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <controls:LauncherButton Content="Cancel" Click="CancelClicked" />
+          <controls:LauncherButton Classes="danger" Content="Force Stop" Click="ConfirmClicked" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Panel>
+</Window>

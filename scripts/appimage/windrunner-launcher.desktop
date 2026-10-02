@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Windrunner Launcher
+Comment=Launcher for classic realms
+Exec=WindrunnerLauncher
+Icon=windrunner-launcher
+Terminal=false
+Categories=Game;

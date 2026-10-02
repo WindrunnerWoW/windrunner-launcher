@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.Dialogs.DownloadCancelDialog"
+        Title="Cancel Download"
+        Width="480"
+        Height="240"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent">
+  <Panel>
+    <Border Classes="dialog-surface" Margin="16" Padding="18">
+      <Grid RowDefinitions="Auto,*,Auto" RowSpacing="14">
+        <TextBlock Text="Cancel the active download?" Classes="subheading" />
+        <TextBlock Grid.Row="1"
+                   Text="Downloaded temporary data will be removed. You can restart the download later."
+                   Classes="muted" />
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <controls:LauncherButton Content="Keep downloading" Click="KeepClicked" />
+          <controls:LauncherButton Classes="danger" Content="Cancel download" Click="CancelClicked" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Panel>
+</Window>

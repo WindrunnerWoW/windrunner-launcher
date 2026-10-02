@@ -1,0 +1,24 @@
+; Filled in by setup.ps1. Forward slashes on purpose.
+
+[client]
+port=@MYSQL_PORT@
+default-character-set=utf8mb4
+
+[mysqld]
+port=@MYSQL_PORT@
+basedir=@BASEDIR@
+datadir=@DATADIR@
+tmpdir=@TMPDIR@
+
+bind-address=127.0.0.1
+skip-networking=0
+
+character-set-server=utf8mb4
+collation-server=utf8mb4_general_ci
+init_connect='SET NAMES utf8mb4'
+
+innodb_buffer_pool_size=512M
+innodb_log_file_size=256M
+innodb_flush_log_at_trx_commit=2
+max_allowed_packet=64M
+max_connections=200

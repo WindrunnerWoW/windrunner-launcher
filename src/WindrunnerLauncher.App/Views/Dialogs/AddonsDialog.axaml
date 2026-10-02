@@ -1,0 +1,90 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WindrunnerLauncher.App.ViewModels"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.Dialogs.AddonsDialog"
+        x:DataType="vm:AddonsViewModel"
+        Title="Addons"
+        Width="760"
+        Height="640"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent">
+  <Border Margin="18" Classes="realm-dialog-surface">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="10" Margin="22,16,22,18">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="Addons" Classes="realm-dialog-title" />
+          <TextBlock Text="Browse, install, and update UI addons for this realm's client version."
+                     Classes="realm-dialog-subtitle" />
+        </StackPanel>
+        <Button Grid.Column="1" Classes="realm-dialog-close" Content="×"
+                Click="CloseClicked" ToolTip.Tip="Close" />
+      </Grid>
+
+      <Border Grid.Row="1" Classes="realm-dialog-rule" />
+
+      <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBox Classes="realm-field" Watermark="Search addons by name, author or category..."
+                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+        <controls:LauncherButton Grid.Column="1" Content="+ Add addon" Classes="accent"
+                                 Click="AddAddonClicked" Padding="12,8" />
+      </Grid>
+
+      <TextBlock Grid.Row="3" Text="This list lives in config/addons.json — you can edit that file directly too. A GitHub/Codeberg link tracks that repo's latest release; narrow it with an asset filter (e.g. *1.12*) when a release ships more than one file. With installAllMatchingAssets, ZIP files are merged and split ZIP parts (.001, .002, etc.) are joined automatically."
+                 Classes="muted" FontSize="11" FontStyle="Italic" TextWrapping="Wrap" />
+
+      <Grid Grid.Row="4" RowDefinitions="Auto,*" RowSpacing="8">
+        <Grid ColumnDefinitions="*,90,74,232" Margin="0,0,14,0">
+          <TextBlock Text="ADDON" Classes="eyebrow" />
+          <TextBlock Grid.Column="1" Text="CATEGORY" Classes="eyebrow" />
+          <TextBlock Grid.Column="2" Text="VERSION" Classes="eyebrow" />
+          <TextBlock Grid.Column="3" Text="STATE" Classes="eyebrow" />
+        </Grid>
+
+        <TextBlock Grid.Row="1" Text="No addons match your search." Classes="muted" IsVisible="{Binding NoItems}" />
+
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding HasItems}">
+          <ItemsControl ItemsSource="{Binding Items}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:AddonItemViewModel">
+                <Border BorderBrush="{DynamicResource AppSeparatorBrush}" BorderThickness="0,0,0,1" Padding="0,8" Margin="0,0,14,0">
+                  <Grid ColumnDefinitions="*,90,74,232" ColumnSpacing="10">
+                    <StackPanel Spacing="1">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Classes="ink" FontSize="14" />
+                      <TextBlock Text="{Binding AuthorLabel}" FontSize="11" Classes="muted" />
+                      <TextBlock Text="{Binding Description}" FontSize="12" Classes="muted" />
+                      <TextBlock Text="{Binding SourceLabel}" FontSize="11" Classes="muted" FontStyle="Italic" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding StatusLabel}" FontSize="11" Classes="muted" />
+                      <TextBlock Text="{Binding ErrorText}" IsVisible="{Binding HasErrorText}"
+                                 Foreground="#9A2F2A" FontSize="11" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding Category}" Classes="eyebrow" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Text="{Binding Version}" Classes="eyebrow" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                      <controls:LauncherButton Content="{Binding ActionLabel}"
+                                               Command="{Binding InstallOrUpdateCommand}"
+                                               IsEnabled="{Binding CanRunAction}"
+                                               Classes.accent="{Binding IsUpdateAction}"
+                                               Padding="8,4" FontSize="11" />
+                      <controls:LauncherButton Content="{Binding ToggleLabel}"
+                                               Command="{Binding ToggleCommand}"
+                                               IsVisible="{Binding Installed}"
+                                               IsEnabled="{Binding CanToggle}"
+                                               Classes.accent="{Binding IsEnableAction}"
+                                               Classes.danger="{Binding IsDisableAction}"
+                                               Padding="8,4" FontSize="11" />
+                      <controls:LauncherButton Content="Remove" Command="{Binding RemoveCommand}"
+                                               Padding="8,4" FontSize="11" ToolTip.Tip="Remove from the addon list" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>
