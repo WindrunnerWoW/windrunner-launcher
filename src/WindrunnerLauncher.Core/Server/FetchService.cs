@@ -341,6 +341,23 @@ public sealed class FetchService : IDisposable
         return (maps.Url, maps.Sha256);
     }
 
+    /// <summary>
+    /// True when maps are installed but came from an older signed manifest entry than the current one.
+    /// Missing maps are not reported here; setup fetches those.
+    /// </summary>
+    public bool MapsOutOfDate()
+    {
+        var maps = _mods?.Manifest.Maps;
+        if (maps is null || string.IsNullOrWhiteSpace(maps.Url) || string.IsNullOrWhiteSpace(maps.Sha256))
+            return false;
+        if (!ServerUtil.MapsPresent(_paths.Maps))
+            return false;
+
+        var sourceHash = ServerUtil.Sha256Hex(maps.Url + "\n" + maps.Sha256);
+        var installedHash = ServerUtil.ReadTrimmed(Path.Combine(_paths.ServerData, ".maps-source-sha256"));
+        return installedHash != sourceHash;
+    }
+
     private async Task SaveMapsZipAsync(string raw, string outFile, string expectedSha, Action<string>? log, CancellationToken ct)
     {
         if (GoogleDrive.FileId(raw) is { } driveId)

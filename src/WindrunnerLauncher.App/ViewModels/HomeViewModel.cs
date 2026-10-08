@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -74,6 +75,15 @@ public sealed partial class HomeViewModel : RuntimeViewModel, IDisposable
     public ObservableCollection<NewsItem> NewsItems { get; } = [];
     public IImage BackgroundImage => _backgroundImage;
 
+    public bool ShowNews => Main.Runtime.State.Settings.ShowNews;
+
+    [RelayCommand]
+    private void RefreshNews() => Main.RefreshNews();
+
+    // With news hidden the news column collapses to zero, so the artwork takes the whole row.
+    public GridLength ArtworkColumnWidth => ShowNews ? new GridLength(1.15, GridUnitType.Star) : new GridLength(1, GridUnitType.Star);
+    public GridLength NewsColumnWidth => ShowNews ? new GridLength(0.85, GridUnitType.Star) : new GridLength(0);
+
     public string RealmName => Main.Status.Realm?.DisplayName ?? Texts["realm.local"];
     public string RealmAddress => Main.Status.Realm is null
         ? ""
@@ -135,6 +145,9 @@ public sealed partial class HomeViewModel : RuntimeViewModel, IDisposable
         OnPropertyChanged(nameof(ModsIsReady));
         OnPropertyChanged(nameof(UpdatesIsReady));
         OnPropertyChanged(nameof(UpdatesIsWarning));
+        OnPropertyChanged(nameof(ShowNews));
+        OnPropertyChanged(nameof(ArtworkColumnWidth));
+        OnPropertyChanged(nameof(NewsColumnWidth));
         RebuildNews();
     }
 
@@ -161,6 +174,14 @@ public sealed partial class HomeViewModel : RuntimeViewModel, IDisposable
 
     private void RebuildNews()
     {
+        // Hidden news builds no items, so no thumbnail is ever queued for download.
+        if (!ShowNews)
+        {
+            NewsItems.Clear();
+            _newsSource = null;
+            return;
+        }
+
         // Thumbnails update items in place, so the list only changes with the feed or language.
         var feedItems = Main.Runtime.News.Items;
         var language = Main.Runtime.Loc.Language;

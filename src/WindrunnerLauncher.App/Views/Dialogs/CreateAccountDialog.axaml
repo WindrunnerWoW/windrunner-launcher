@@ -13,8 +13,9 @@
     <controls:ParchmentPanel Margin="16" ContentPadding="16">
       <StackPanel Spacing="12">
         <TextBlock Text="Create a local realm account" Classes="subheading" />
-        <TextBlock Text="Credentials are sent directly to your local mangosd console."
+        <TextBlock Text="Account is written directly to the local realm database."
                    FontSize="12" Classes="muted" />
+        <TextBlock x:Name="StatusText" FontSize="12" Foreground="Firebrick" />
         <StackPanel>
           <TextBlock Text="USERNAME" Classes="eyebrow" />
           <TextBox x:Name="UsernameBox" MaxLength="16" />

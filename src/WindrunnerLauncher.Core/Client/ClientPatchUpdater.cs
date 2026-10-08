@@ -160,7 +160,8 @@ public sealed class ClientPatchUpdater
 
     /// <summary>An explicit "off" for the realm means the server it talks to does not use the patch.</summary>
     public static bool IsWanted(RealmEntry realm, string fileName) =>
-        !realm.MpqFileState.TryGetValue(fileName, out var enabled) || enabled;
+        ClientManager.IsRequiredFor(realm, fileName)
+        || !realm.MpqFileState.TryGetValue(fileName, out var enabled) || enabled;
 
     private async Task DownloadAndReplaceAsync(ClientPatchUpdate update, CancellationToken ct)
     {

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Avalonia;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Styling;
@@ -118,6 +119,21 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         }
     }
 
+    public bool ShowNews
+    {
+        get => Main.Runtime.State.Settings.ShowNews;
+        set
+        {
+            if (Main.Runtime.State.Settings.ShowNews == value)
+                return;
+            Main.Runtime.State.Settings.ShowNews = value;
+            Save();
+            if (value)
+                Main.RefreshNews();
+            OnPropertyChanged();
+        }
+    }
+
     public bool LightMode
     {
         get => Main.Runtime.State.Settings.LightMode;
@@ -214,10 +230,36 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         NotifyClientPath();
     }
 
+    /// <summary>No playable client yet, so the managed client can be downloaded from here.</summary>
+    public bool NoClientInstalled => !Main.Runtime.Client.IsValid(ClientPathText);
+
+    public bool CanDownloadManagedClient => NoClientInstalled && ClientManager.CanBootstrap(Main.Runtime.Mods.Manifest);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasClientDownloadStatus))]
+    private string _clientDownloadStatus = "";
+
+    public bool HasClientDownloadStatus => ClientDownloadStatus.Length > 0;
+
+    [RelayCommand(CanExecute = nameof(CanDownloadManagedClient))]
+    private async Task DownloadManagedClientAsync()
+    {
+        ClientDownloadStatus = "Downloading the managed client…";
+        var ok = await Main.RunGuardedAsync(() => Main.Runtime.Client.BootstrapAsync(
+            Main.Runtime.Mods.Manifest, Main.Runtime.Downloads,
+            status: text => Dispatcher.UIThread.Post(() => ClientDownloadStatus = text)));
+        ClientDownloadStatus = ok ? "" : "The client download did not finish. See the error dialog for details.";
+        Main.Runtime.Notify();
+        NotifyClientPath();
+    }
+
     private void NotifyClientPath()
     {
         OnPropertyChanged(nameof(ClientPathText));
         OnPropertyChanged(nameof(ClientPathStatus));
+        OnPropertyChanged(nameof(NoClientInstalled));
+        OnPropertyChanged(nameof(CanDownloadManagedClient));
+        DownloadManagedClientCommand.NotifyCanExecuteChanged();
     }
 
     public bool CheckUpdatesOnStartup
@@ -250,9 +292,57 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         ? "No server release is ignored."
         : $"Ignoring {Main.Runtime.State.Settings.IgnoredServerRelease}";
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUpdateCheckStatus))]
+    private string _updateCheckStatus = "";
+
+    public bool HasUpdateCheckStatus => UpdateCheckStatus.Length > 0;
+
+    public bool MapsUpdateAvailable => Main.Runtime.Updates.MapsUpdateAvailable;
+
+    /// <summary>Checks the server release, the maps and the client patches for the selected realm.</summary>
     [RelayCommand]
-    private Task CheckUpdatesAsync() =>
-        Main.RunGuardedAsync(() => Main.Runtime.Updates.CheckAsync());
+    private async Task CheckUpdatesAsync()
+    {
+        UpdateCheckStatus = "Checking for updates…";
+        var realm = Main.Runtime.State.SelectedRealm();
+        var ok = await Main.RunGuardedAsync(async () =>
+        {
+            await Main.Runtime.Updates.CheckAsync();
+            await Main.Runtime.ClientPatches.CheckAsync(realm, fetch: true);
+        });
+        UpdateCheckStatus = ok ? BuildUpdateSummary(realm) : "The update check did not finish. See the error dialog for details.";
+        OnPropertyChanged(nameof(MapsUpdateAvailable));
+        UpdateMapsCommand.NotifyCanExecuteChanged();
+    }
+
+    private string BuildUpdateSummary(RealmEntry realm)
+    {
+        var updates = Main.Runtime.Updates;
+        var lines = new List<string>
+        {
+            updates.ServerUpdateAvailable
+                ? $"Server {updates.LatestServerRelease} is available. Update it from the Server tab."
+                : "Server is up to date.",
+            updates.MapsUpdateAvailable
+                ? "Maps (DBC) have a new version. Press Update maps."
+                : "Maps are up to date."
+        };
+
+        var patches = Main.Runtime.ClientPatches.PendingFor(realm).Select(update => update.Asset.Name).ToList();
+        lines.Add(patches.Count == 0
+            ? "Client patches are up to date."
+            : $"Client patches to update: {string.Join(", ", patches)}. Press Update on the Play bar.");
+
+        lines.AddRange(updates.LastCheckProblems.Select(problem => "⚠ " + problem));
+        return string.Join("\n", lines);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanUpdateMaps))]
+    private Task UpdateMapsAsync() =>
+        Main.RunGuardedAsync(() => Main.Runtime.Updates.UpdateMapsAsync());
+
+    private bool CanUpdateMaps => MapsUpdateAvailable;
 
     public string CurrentLauncherVersionText => $"Running v{Main.Runtime.Updates.CurrentLauncherVersion}";
     public bool LauncherUpdateAvailable => Main.Runtime.Updates.LauncherUpdateAvailable;
@@ -454,6 +544,9 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
     internal void Refresh()
     {
         OnPropertyChanged(nameof(ShowBranding));
+        OnPropertyChanged(nameof(ShowNews));
+        OnPropertyChanged(nameof(MapsUpdateAvailable));
+        UpdateMapsCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(LightMode));
         SyncBackgroundSelection();
         OnPropertyChanged(nameof(CheckUpdatesOnStartup));

@@ -478,8 +478,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Dispatcher.UIThread.Post(Refresh);
     }
 
+    /// <summary>Fetches the feed, unless the user turned news off.</summary>
+    internal void RefreshNews() => _ = RefreshNewsInBackgroundAsync();
+
     private async Task RefreshNewsInBackgroundAsync()
     {
+        if (!_runtime.State.Settings.ShowNews)
+            return;
         await _runtime.News.RefreshAsync().ConfigureAwait(false);
         Dispatcher.UIThread.Post(Refresh);
     }

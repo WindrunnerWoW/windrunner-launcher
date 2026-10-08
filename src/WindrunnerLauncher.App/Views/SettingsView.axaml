@@ -32,6 +32,12 @@
                              FontSize="12" Classes="muted" />
                 </StackPanel>
                 <StackPanel Spacing="4">
+                  <ToggleSwitch Content="{Binding Texts[settings.news]}"
+                                IsChecked="{Binding ShowNews, Mode=TwoWay}" />
+                  <TextBlock Text="When hidden, the news feed is not downloaded and the home artwork fills the page."
+                             FontSize="12" Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Spacing="4">
                   <ToggleSwitch Content="{Binding Texts[settings.light]}"
                                 IsChecked="{Binding LightMode, Mode=TwoWay}" />
                   <TextBlock Text="Use a brighter, neutral interface for daytime play."
@@ -89,6 +95,12 @@
                   <TextBlock Grid.Column="1" Text="{Binding CurrentLauncherVersionText}"
                              Classes="muted" FontSize="12" VerticalAlignment="Center" />
                 </Grid>
+                <StackPanel Spacing="8" IsVisible="{Binding HasUpdateCheckStatus}">
+                  <TextBlock Text="{Binding UpdateCheckStatus}" FontSize="12" TextWrapping="Wrap" />
+                  <controls:LauncherButton HorizontalAlignment="Left" Content="Update maps"
+                                           Command="{Binding UpdateMapsCommand}"
+                                           IsVisible="{Binding MapsUpdateAvailable}" />
+                </StackPanel>
 
                 <Border Classes="realm-shell" Padding="12" IsVisible="{Binding LauncherUpdateAvailable}">
                   <StackPanel Spacing="8">
@@ -125,6 +137,16 @@
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <controls:LauncherButton Classes="accent" Content="Choose folder…" Click="ChooseClientFolderClicked" />
                   <controls:LauncherButton Content="Use managed client" Command="{Binding UseManagedClientCommand}" />
+                </StackPanel>
+                <StackPanel Spacing="8" IsVisible="{Binding NoClientInstalled}">
+                  <TextBlock Text="No client is installed yet. Download the managed client whenever you're ready."
+                             Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                  <controls:LauncherButton Classes="accent" HorizontalAlignment="Left"
+                                           Content="Download managed client"
+                                           Command="{Binding DownloadManagedClientCommand}"
+                                           IsEnabled="{Binding CanDownloadManagedClient}" />
+                  <TextBlock Text="{Binding ClientDownloadStatus}" FontSize="12" TextWrapping="Wrap"
+                             IsVisible="{Binding HasClientDownloadStatus}" />
                 </StackPanel>
                 <TextBlock Text="{Binding ClientPathError}" FontSize="12" TextWrapping="Wrap"
                            IsVisible="{Binding HasClientPathError}" />

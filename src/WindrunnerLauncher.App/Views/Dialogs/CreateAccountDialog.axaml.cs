@@ -14,8 +14,17 @@ public sealed partial class CreateAccountDialog : Window
     {
         var username = this.FindControl<TextBox>("UsernameBox")!.Text?.Trim() ?? "";
         var password = this.FindControl<TextBox>("PasswordBox")!.Text ?? "";
-        if (username.Length < 3 || password.Length < 3)
+        var status = this.FindControl<TextBlock>("StatusText")!;
+        if (username.Length < 2 || username.Length > 16 || !username.All(char.IsLetterOrDigit))
+        {
+            status.Text = "Username must be 2-16 letters or digits.";
             return;
+        }
+        if (password.Length < 1 || password.Length > 16)
+        {
+            status.Text = "Password must be 1-16 characters.";
+            return;
+        }
         Close(new AccountCredentials(username, password));
     }
 }
