@@ -178,6 +178,13 @@ public sealed class ModManager : IManagedAssetRepairer
     public bool IsInstalled(RealmEntry realm, ManagedAsset asset) =>
         ModHandlers.For(asset.Kind).IsInstalled(BuildContext(realm, asset));
 
+    /// <summary>True when the catalog asset with this id is actually applied to the realm's client.</summary>
+    public bool IsApplied(RealmEntry realm, string assetId)
+    {
+        var asset = _manifest.Assets.FirstOrDefault(a => a.Id == assetId);
+        return asset is not null && ModHandlers.IsSupported(asset.Kind) && IsApplied(realm, asset);
+    }
+
     public int EnabledCountFor(RealmEntry realm) =>
         _manifest.Assets.Count(a => ModHandlers.IsSupported(a.Kind) && DesiredState(realm, a));
 
@@ -287,8 +294,8 @@ public sealed class ModManager : IManagedAssetRepairer
             .Select(name => new ClientMpqItem
             {
                 FileName = name,
-                Required = ClientManager.IsOfficialMpq(name),
-                Enabled = ClientManager.IsOfficialMpq(name) || !realm.MpqFileState.TryGetValue(name, out var enabled) || enabled,
+                Required = ClientManager.IsRequiredFor(realm, name),
+                Enabled = ClientManager.IsRequiredFor(realm, name) || !realm.MpqFileState.TryGetValue(name, out var enabled) || enabled,
                 Active = FindMpqPath(data, name) is not null
             })
             .OrderByDescending(item => item.Required)
@@ -301,8 +308,8 @@ public sealed class ModManager : IManagedAssetRepairer
     {
         ct.ThrowIfCancellationRequested();
         ValidateClientMpqName(fileName);
-        if (ClientManager.IsOfficialMpq(fileName))
-            throw new InvalidOperationException($"{fileName} is a required client archive and cannot be disabled.");
+        if (ClientManager.IsRequiredFor(realm, fileName))
+            throw new InvalidOperationException($"{fileName} is required for {realm.DisplayName} and cannot be disabled.");
 
         var data = ClientPaths.Resolve(ClientDirFor(realm), "Data");
         var disabled = ClientPaths.Resolve(data, DisabledMpqFolderName);
@@ -327,7 +334,7 @@ public sealed class ModManager : IManagedAssetRepairer
         foreach (var name in EnumerateClientMpqNames(data, disabled))
         {
             ct.ThrowIfCancellationRequested();
-            var enabled = ClientManager.IsOfficialMpq(name)
+            var enabled = ClientManager.IsRequiredFor(realm, name)
                 || !realm.MpqFileState.TryGetValue(name, out var desired) || desired;
             if (MoveClientMpq(data, disabled, name, enabled))
                 log.Add($"{(enabled ? "Enabled" : "Disabled")} {name} for {realm.DisplayName}.");

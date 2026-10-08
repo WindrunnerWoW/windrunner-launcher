@@ -6,6 +6,9 @@ public sealed class LauncherSettings
 {
     public string Language { get; set; } = "en";
     public bool ShowBranding { get; set; } = true;
+
+    /// <summary>When off, the news feed is never downloaded and the home artwork fills the page.</summary>
+    public bool ShowNews { get; set; } = true;
     public bool LightMode { get; set; }
     public string? HomeBackgroundPath { get; set; }
     public string LastSelectedRealmId { get; set; } = RealmEntry.LocalServerId;

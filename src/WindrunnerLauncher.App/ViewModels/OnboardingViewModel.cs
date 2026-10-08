@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using WindrunnerLauncher.Core.Client;
 using WindrunnerLauncher.Core.Models;
 
 namespace WindrunnerLauncher.App.ViewModels;
@@ -125,17 +126,7 @@ public sealed partial class OnboardingViewModel : ObservableObject
         get => !UseInstalledClient && !DownloadCleanClient;
         set { if (value) { UseInstalledClient = false; DownloadCleanClient = false; } }
     }
-    public bool CanDownloadClient
-    {
-        get
-        {
-            var bootstrap = _main.Runtime.Mods.Manifest.Bootstrap;
-            return bootstrap is not null &&
-                   !string.IsNullOrWhiteSpace(bootstrap.Url) &&
-                   bootstrap.Sha256.Length == 64 &&
-                   bootstrap.Sha256.All(Uri.IsHexDigit);
-        }
-    }
+    public bool CanDownloadClient => ClientManager.CanBootstrap(_main.Runtime.Mods.Manifest);
     public bool IsDownloadUnavailable => !CanDownloadClient;
     public bool CanContinue => !IsWorking && (UseInstalledClient
         ? HasInstalledClient
@@ -225,8 +216,8 @@ public sealed partial class OnboardingViewModel : ObservableObject
         settings.Language = _main.Runtime.Loc.Language;
         settings.InstallChoice = InstallChoice;
         settings.ClientIsManagedCopy = CreateManagedCopy;
-        settings.OnboardingCompleted = _main.Runtime.Client.IsValid(
-            _main.Runtime.Client.ResolveClientPath());
+        // Skipping is allowed without a client; the managed client can be downloaded later in Settings.
+        settings.OnboardingCompleted = true;
         _main.Runtime.State.SaveSettings();
         _main.CompleteOnboarding();
         Completed?.Invoke();

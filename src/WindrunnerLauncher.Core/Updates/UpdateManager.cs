@@ -66,6 +66,9 @@ public sealed class UpdateManager
     public bool ServerUpdateAvailable { get; private set; }
     public bool LauncherUpdateAvailable { get; private set; }
 
+    /// <summary>The installed dbc/maps/vmaps/mmaps come from an older signed client manifest entry.</summary>
+    public bool MapsUpdateAvailable { get; private set; }
+
     /// <summary>Notes gathered by the last check: server release body plus client changelog.</summary>
     public string? PatchNotes { get; private set; }
 
@@ -164,6 +167,7 @@ public sealed class UpdateManager
         await _mods.RefreshFromRemoteAsync(ct).ConfigureAwait(false);
         RefreshClientStatus();
         await CheckServerAsync(problems, ct).ConfigureAwait(false);
+        MapsUpdateAvailable = _server.Fetch.MapsOutOfDate();
 
         LastCheckUtc = DateTime.UtcNow;
         LastCheckProblems = problems;
@@ -398,6 +402,24 @@ public sealed class UpdateManager
         try { File.Delete(path); } catch { }
     }
 
+    /// <summary>
+    /// Re-fetches the maps for the current client manifest. The server is stopped while the files
+    /// change and started again afterwards if it was running.
+    /// </summary>
+    public async Task UpdateMapsAsync(CancellationToken ct = default)
+    {
+        var wasRunning = await _server.RunOfflineAsync(ServerLifecycleState.Updating, "Updating maps…", async running =>
+        {
+            await _server.Fetch.FetchMapsAsync(false, ct, _server.Log).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
+
+        if (wasRunning)
+            await _server.StartAsync(ct).ConfigureAwait(false);
+
+        MapsUpdateAvailable = _server.Fetch.MapsOutOfDate();
+        Changed?.Invoke();
+    }
+
 
     /// <summary>
     /// Downloads, verifies and applies every required asset that is missing or stale, plus any
@@ -554,11 +576,25 @@ public sealed class UpdateManager
                     _state.Settings.IgnoredServerRelease = null;
                 _state.SaveSettings();
                 log.Add($"Installed server {tag}.");
+
+                // dbc/maps/vmaps/mmaps follow the signed client manifest, not the server release.
+                // Fetching is a no-op when that entry is unchanged, so this only downloads new data.
+                // Maps are not part of the rollback backup, so a failure is reported instead of undone.
+                try
+                {
+                    await _server.Fetch.FetchMapsAsync(false, ct, _server.Log).ConfigureAwait(false);
+                    log.Add("Maps are up to date.");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    log.Add($"Maps were not refreshed: {ex.Message}");
+                }
             }, ct).ConfigureAwait(false);
         }
         finally
         {
             ServerUpdateAvailable = ComputeServerUpdateAvailable();
+            MapsUpdateAvailable = _server.Fetch.MapsOutOfDate();
             Changed?.Invoke();
         }
 

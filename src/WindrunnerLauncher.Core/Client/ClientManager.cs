@@ -1,6 +1,7 @@
 using WindrunnerLauncher.Core.Downloads;
 using WindrunnerLauncher.Core.Models;
 using WindrunnerLauncher.Core.Persistence;
+using WindrunnerLauncher.Core.Realms;
 using WindrunnerLauncher.Core.Security;
 
 namespace WindrunnerLauncher.Core.Client;
@@ -88,6 +89,21 @@ public sealed class ClientManager
         return OfficialMpqSet.Contains(name);
     }
 
+    /// <summary>
+    /// The server's own client patch. The Local Server needs it, so it is forced on there and can't
+    /// be turned off. Other realms keep their own choice.
+    /// </summary>
+    public const string LocalServerPatchName = "patch-W";
+
+    /// <summary>True when the realm cannot run without this archive, so it is always on and never toggled.</summary>
+    public static bool IsRequiredFor(RealmEntry realm, string fileNameOrPath)
+    {
+        if (IsOfficialMpq(fileNameOrPath))
+            return true;
+        return RealmManager.IsLocal(realm)
+               && string.Equals(Path.GetFileNameWithoutExtension(fileNameOrPath), LocalServerPatchName, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Directory the launcher currently treats as "the client".</summary>
     public string ResolveClientPath()
     {
@@ -156,6 +172,16 @@ public sealed class ClientManager
         if (IsValid(_paths.Client))
             EnsureCleanExecutableBackup(_paths.Client);
         Changed?.Invoke();
+    }
+
+    /// <summary>True when the manifest describes a base client the launcher can download and verify.</summary>
+    public static bool CanBootstrap(ClientManifest manifest)
+    {
+        var bootstrap = manifest.Bootstrap;
+        return bootstrap is not null
+               && !string.IsNullOrWhiteSpace(bootstrap.Url)
+               && bootstrap.Sha256.Length == 64
+               && bootstrap.Sha256.All(Uri.IsHexDigit);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using WindrunnerLauncher.Core.Models;
 using WindrunnerLauncher.Core.Platform;
 using WindrunnerLauncher.Core.Mods;
@@ -58,6 +59,9 @@ public sealed class PlayPipeline
     private static readonly TimeSpan ServerPollInterval = TimeSpan.FromSeconds(1);
 
     public const string LoaderExecutable = "VanillaFixes.exe";
+
+    private const string MultiMonitorFixAssetId = "multimonitor";
+    private const string MultiMonitorPreferenceFile = "VMMFix_preferred_monitor.txt";
 
     private readonly LauncherPaths _paths;
     private readonly StateStore _state;
@@ -172,6 +176,8 @@ public sealed class PlayPipeline
         foreach (var move in moves)
             Step(move);
         Step($"Mod state materialized for '{Describe(realm)}'.");
+
+        WritePreferredMonitor(realm, clientDir, Step);
 
         var host = RealmlistWriter.FormatHost(realm.Address, realm.AuthPort);
         RealmlistWriter.Write(clientDir, host);
@@ -324,6 +330,26 @@ public sealed class PlayPipeline
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// VanillaMultiMonitorFix reads its display index from a file in the client folder. Only when the
+    /// mod is applied, point it at the primary display so the game opens where Windows opens it.
+    /// </summary>
+    private void WritePreferredMonitor(RealmEntry realm, string clientDir, Action<string> step)
+    {
+        if (!_mods.IsApplied(realm, MultiMonitorFixAssetId))
+            return;
+
+        var index = Platform.DisplayDevices.PrimaryIndex();
+        if (index is null)
+        {
+            step($"Could not find the primary display; {MultiMonitorPreferenceFile} was left unchanged.");
+            return;
+        }
+
+        File.WriteAllText(ClientPaths.Child(clientDir, MultiMonitorPreferenceFile), index.Value.ToString(CultureInfo.InvariantCulture));
+        step($"Multi-monitor fix set to display {index.Value}.");
     }
 
     private void TrackProcess(int processId)
