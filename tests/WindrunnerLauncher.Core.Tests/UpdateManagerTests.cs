@@ -1,3 +1,4 @@
+using WindrunnerLauncher.Core.Downloads;
 using WindrunnerLauncher.Core.Persistence;
 using WindrunnerLauncher.Core.Security;
 using WindrunnerLauncher.Core.Updates;
@@ -6,6 +7,18 @@ namespace WindrunnerLauncher.Core.Tests;
 
 public class UpdateManagerTests
 {
+    /// <summary>
+    /// A release client that cannot reach GitHub. CheckAsync would otherwise download the live
+    /// launcher manifest and overwrite the test's cached one, so these tests run offline.
+    /// </summary>
+    private static GitHubReleases OfflineReleases() => new(new HttpClient(new OfflineHandler()));
+
+    private sealed class OfflineHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            Task.FromException<HttpResponseMessage>(new HttpRequestException("offline"));
+    }
+
     [Theory]
     [InlineData("1.0.1", "1.0.0", true)]
     [InlineData("v1.0.1", "1.0.0", true)]
@@ -122,7 +135,7 @@ public class UpdateManagerTests
             }
             """);
 
-        using var runtime = new LauncherRuntime(paths);
+        using var runtime = new LauncherRuntime(paths, releases: OfflineReleases());
         var result = await runtime.Updates.CheckAsync();
 
         Assert.False(runtime.Updates.LauncherUpdateAvailable);
@@ -149,7 +162,7 @@ public class UpdateManagerTests
         };
         JsonStore.Save(Path.Combine(paths.ManifestCache, UpdateManager.LauncherEnvelopeFileName), envelope);
 
-        using var runtime = new LauncherRuntime(paths);
+        using var runtime = new LauncherRuntime(paths, releases: OfflineReleases());
         await runtime.Updates.CheckAsync();
 
         Assert.True(runtime.Updates.LauncherUpdateAvailable);
@@ -174,7 +187,7 @@ public class UpdateManagerTests
             PayloadJson = payload
         });
 
-        using var runtime = new LauncherRuntime(paths);
+        using var runtime = new LauncherRuntime(paths, releases: OfflineReleases());
         await runtime.Updates.CheckAsync();
 
         if (OperatingSystem.IsLinux())

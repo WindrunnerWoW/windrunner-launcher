@@ -36,7 +36,8 @@ public sealed class LauncherRuntime : IDisposable
     public DownloadProgress? LastDownload { get; private set; }
     public event Action? Changed;
 
-    public LauncherRuntime(LauncherPaths? paths = null, HttpClient? http = null)
+    /// <param name="releases">GitHub release client for update checks. Tests pass an offline one so no live release is read.</param>
+    public LauncherRuntime(LauncherPaths? paths = null, HttpClient? http = null, GitHubReleases? releases = null)
     {
         Paths = paths ?? LauncherPaths.FromExecutable();
         Paths.EnsureLayout();
@@ -68,7 +69,7 @@ public sealed class LauncherRuntime : IDisposable
         Server = new ServerManager(Paths, State, MariaDb, Mods, Downloads);
         Rollback = new BackupRollbackManager(Paths, State);
         var databaseBackup = new MariaDbDatabaseBackup(MariaDb);
-        Updates = new UpdateManager(Paths, State, Downloads, Server, Mods, Rollback, databaseBackup: databaseBackup);
+        Updates = new UpdateManager(Paths, State, Downloads, Server, Mods, Rollback, releases, databaseBackup: databaseBackup);
         Updates.Changed += () => Changed?.Invoke();
         Backups = new ServerBackupService(Paths, Server, databaseBackup, () => Updates.InstalledServerVersion);
         News = new NewsFeedService();
