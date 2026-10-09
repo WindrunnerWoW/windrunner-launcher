@@ -47,6 +47,9 @@ public sealed class ReleaseCatalog
     public Task<GitHubRelease?> FetchLatestAsync(string host, string ownerRepo, CancellationToken ct = default) =>
         LatestAsync(host, ownerRepo, ct);
 
+    public Task<GitHubRepository?> FetchGitHubRepositoryAsync(string ownerRepo, CancellationToken ct = default) =>
+        _github.RepositoryAsync(ownerRepo, ct);
+
     public static bool TryParse(string spec, out string host, out string ownerRepo)
     {
         host = "";

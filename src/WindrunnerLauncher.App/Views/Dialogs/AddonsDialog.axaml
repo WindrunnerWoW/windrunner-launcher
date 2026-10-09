@@ -32,7 +32,7 @@
                                  Click="AddAddonClicked" Padding="12,8" />
       </Grid>
 
-      <TextBlock Grid.Row="3" Text="This list lives in config/addons.json — you can edit that file directly too. A GitHub/Codeberg link tracks that repo's latest release; narrow it with an asset filter (e.g. *1.12*) when a release ships more than one file. With installAllMatchingAssets, ZIP files are merged and split ZIP parts (.001, .002, etc.) are joined automatically."
+      <TextBlock Grid.Row="3" Text="This list lives in config/addons.json — you can edit that file directly too. A GitHub link uses its latest release assets, or downloads the default-branch source archive when none are available; Codeberg links use releases. Narrow release assets with a filter (e.g. *1.12*) when needed. With installAllMatchingAssets, ZIP files are merged and split ZIP parts (.001, .002, etc.) are joined automatically."
                  Classes="muted" FontSize="11" FontStyle="Italic" TextWrapping="Wrap" />
 
       <Grid Grid.Row="4" RowDefinitions="Auto,*" RowSpacing="8">

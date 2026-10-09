@@ -16,7 +16,7 @@
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel VerticalAlignment="Center">
           <TextBlock Text="Add addon" Classes="realm-dialog-title" />
-          <TextBlock Text="A GitHub or Codeberg link tracks that repo's latest release; anything else is a fixed download."
+          <TextBlock Text="A GitHub link uses its latest release assets, or the default-branch source archive if none are available. Codeberg links use releases; other links are fixed downloads."
                      Classes="realm-dialog-subtitle" TextWrapping="Wrap" />
         </StackPanel>
         <Button Grid.Column="1" Classes="realm-dialog-close" Content="&#215;"
