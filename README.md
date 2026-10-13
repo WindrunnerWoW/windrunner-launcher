@@ -45,9 +45,13 @@ after `v0.1.1-build.5`, use `0.1.2` or higher; changing only the build number do
 not count. The release workflow checks this again before building, including
 versions supplied through a tag or manual workflow input.
 
-The `main` ruleset requires **Release version check** to pass and branches to be
-up to date before merging, so another merged version bump cannot leave an older
-PR's passing check stale. Keep this check required under
+Pull requests also run **Build check**, which requires the existing Linux and
+Windows CI build and test jobs to succeed. Failed, cancelled, or skipped jobs
+fail the check. Windows can still use the existing JIT fallback if AOT fails.
+
+The `main` ruleset requires **Release version check** and **Build check** to pass,
+and branches to be up to date before merging, so another merged version bump
+cannot leave an older PR's passing check stale. Keep these checks required under
 **Settings → Rules → Rulesets → Require status checks to pass before merging**.
 
 ## Contributing
