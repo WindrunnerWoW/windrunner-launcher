@@ -39,6 +39,17 @@ The published file is `src/WindrunnerLauncher.App/bin/Release/net9.0/win-x64/pub
 
 CI publishes **Windows** and **Linux** builds on pushes to `main`. Linux AppImages: `chmod +x WindrunnerLauncher.AppImage` then run it. If FUSE is missing, use `APPIMAGE_EXTRACT_AND_RUN=1 ./WindrunnerLauncher.AppImage`. Linux data lives under `~/.local/share/windrunner-launcher`.
 
+Pull requests run **Release version check**. The `<Version>` in `Directory.Build.props`
+must be newer than the latest stable GitHub release's app version. For example,
+after `v0.1.1-build.5`, use `0.1.2` or higher; changing only the build number does
+not count. The release workflow checks this again before building, including
+versions supplied through a tag or manual workflow input.
+
+The `main` ruleset requires **Release version check** to pass and branches to be
+up to date before merging, so another merged version bump cannot leave an older
+PR's passing check stale. Keep this check required under
+**Settings → Rules → Rulesets → Require status checks to pass before merging**.
+
 ## Contributing
 
 Don't
