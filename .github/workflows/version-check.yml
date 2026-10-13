@@ -1,0 +1,28 @@
+name: Version check
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: version-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version-check:
+    name: Release version check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test version guard
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+      - name: Require a version newer than the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/check-release-version.py

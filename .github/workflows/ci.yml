@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -19,6 +20,25 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
 jobs:
+  build-check:
+    name: Build check
+    needs: [test, windows-build]
+    # A skipped dependent job can satisfy a required check. Always run this gate
+    # and explicitly fail unless both build jobs completed successfully.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require successful Linux and Windows builds and tests
+        env:
+          LINUX_RESULT: ${{ needs.test.result }}
+          WINDOWS_RESULT: ${{ needs.windows-build.result }}
+        run: |
+          if [[ "$LINUX_RESULT" != "success" || "$WINDOWS_RESULT" != "success" ]]; then
+            echo "::error::Build check failed: Linux=$LINUX_RESULT, Windows=$WINDOWS_RESULT."
+            exit 1
+          fi
+          echo "Linux and Windows builds and tests passed."
+
   test:
     name: Test (Linux)
     runs-on: ubuntu-latest
