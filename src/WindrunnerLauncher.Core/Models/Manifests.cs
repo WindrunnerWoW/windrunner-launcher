@@ -106,7 +106,7 @@ public sealed class AddonEntry
     public string Category { get; set; } = "";
     public string Description { get; set; } = "";
 
-    /// <summary>Latest known version/tag. For a GitHub-backed entry this is refreshed from the latest release.</summary>
+    /// <summary>Latest known release tag or source archive revision.</summary>
     public string Version { get; set; } = "";
 
     /// <summary>Version/tag that is actually on disk right now, or "" if never installed.</summary>
@@ -115,7 +115,7 @@ public sealed class AddonEntry
     /// <summary>Direct download link. Used as-is when <see cref="GitHubRepo"/> is empty.</summary>
     public string Url { get; set; } = "";
 
-    /// <summary>"owner/repo", or "codeberg.org/owner/repo". When set, installs/updates resolve the latest release instead of using <see cref="Url"/> directly.</summary>
+    /// <summary>"owner/repo", or "codeberg.org/owner/repo". When set, installs/updates resolve a release instead of using <see cref="Url"/> directly. GitHub repos without a release use the default-branch source archive.</summary>
     public string GitHubRepo { get; set; } = "";
 
     /// <summary>

@@ -7,7 +7,11 @@ using WindrunnerLauncher.Core.Persistence;
 namespace WindrunnerLauncher.Core.Mods;
 
 public sealed record AddonReleaseCandidate(string Tag, GitHubReleaseAsset Asset);
-public sealed record AddonReleaseSet(string Tag, IReadOnlyList<GitHubReleaseAsset> Assets);
+public sealed record AddonReleaseSet(
+    string Tag,
+    IReadOnlyList<GitHubReleaseAsset> Assets,
+    string? SourceFolderName = null,
+    string? SourceBranch = null);
 
 /// <summary>
 /// Owns the user-facing addon catalog at <see cref="LauncherPaths.AddonsFile"/>. The file is seeded
@@ -16,11 +20,12 @@ public sealed record AddonReleaseSet(string Tag, IReadOnlyList<GitHubReleaseAsse
 /// edit or delete addons themselves.
 ///
 /// An entry with a <see cref="AddonEntry.GitHubRepo"/> resolves its download from that repository's
-/// latest release every time it is installed, updated or checked, instead of a fixed URL. Because a
-/// release can carry several files (different game-version builds, debug symbols, checksums...), an
-/// optional <see cref="AddonEntry.AssetFilter"/> narrows the release's assets down to the intended
-/// payload. Entries with <see cref="AddonEntry.InstallAllMatchingAssets"/> can consume multiple ZIPs
-/// from one release, including numbered byte segments of a single split ZIP archive.
+/// latest release every time it is installed, updated or checked, instead of a fixed URL. If a
+/// GitHub repository has no downloadable release assets, its default-branch source archive is used.
+/// Because a release can carry several files (different game-version builds, debug symbols, checksums...), an optional
+/// <see cref="AddonEntry.AssetFilter"/> narrows the release's assets down to the intended payload.
+/// Entries with <see cref="AddonEntry.InstallAllMatchingAssets"/> can consume multiple ZIPs from one
+/// release, including numbered byte segments of a single split ZIP archive.
 /// </summary>
 public sealed class AddonManager
 {
@@ -54,9 +59,10 @@ public sealed class AddonManager
 
 
     /// <summary>
-    /// Adds an entry from a pasted URL. A github.com/codeberg.org link is treated as "track this
-    /// repository's latest release" and is resolved immediately so a bad repo or filter is caught
-    /// now instead of at the next install. Anything else is stored as a fixed direct download.
+    /// Adds an entry from a pasted URL. A GitHub link tracks its latest release, falling back to
+    /// the default-branch source archive when no downloadable release assets exist. Codeberg links track releases.
+    /// The source is resolved immediately so invalid repos or filters fail at add time.
+    /// Anything else is stored as a fixed direct download.
     /// </summary>
     public async Task<AddonEntry> AddFromUrlAsync(string url, string? assetFilter, CancellationToken ct = default)
     {
@@ -89,9 +95,11 @@ public sealed class AddonManager
                 AssetFilter = assetFilter
             };
 
-            var candidate = await ResolveReleaseAsync(entry, ct).ConfigureAwait(false);
-            entry.Version = candidate.Tag;
-            entry.Description = $"Latest release: {candidate.Asset.Name}";
+            var candidates = await ResolveReleaseAssetsAsync(entry, ct).ConfigureAwait(false);
+            entry.Version = candidates.Tag;
+            entry.Description = candidates.SourceFolderName is null
+                ? $"Latest release: {candidates.Assets[0].Name}"
+                : $"Source archive from the {candidates.SourceBranch} branch.";
         }
         else
         {
@@ -139,7 +147,7 @@ public sealed class AddonManager
     public void Save() => JsonStore.Save(_paths.AddonsFile, _catalog);
 
 
-    /// <summary>Resolves the one release asset an entry's repo + filter currently point at. Never downloads.</summary>
+    /// <summary>Resolves the one downloadable archive an entry's repo + filter currently point at. Never downloads.</summary>
     public async Task<AddonReleaseCandidate> ResolveReleaseAsync(AddonEntry entry, CancellationToken ct = default)
     {
         var set = await ResolveReleaseAssetsAsync(entry, ct).ConfigureAwait(false);
@@ -154,7 +162,7 @@ public sealed class AddonManager
         return new AddonReleaseCandidate(set.Tag, set.Assets[0]);
     }
 
-    /// <summary>Resolves all release assets an entry should install. Never downloads.</summary>
+    /// <summary>Resolves all release assets or the GitHub source archive an entry should install. Never downloads.</summary>
     public async Task<AddonReleaseSet> ResolveReleaseAssetsAsync(AddonEntry entry, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(entry.GitHubRepo))
@@ -163,8 +171,38 @@ public sealed class AddonManager
             throw new InvalidOperationException($"{Display(entry)} has an invalid repository '{entry.GitHubRepo}'.");
 
         var release = await _releases.FetchLatestAsync(host, ownerRepo, ct).ConfigureAwait(false);
-        if (release is null)
-            throw new InvalidOperationException($"Could not read the latest release of {entry.GitHubRepo}.");
+        if (release is null || !release.Assets.Any(a =>
+                !string.IsNullOrWhiteSpace(a.Name)
+                && !string.IsNullOrWhiteSpace(a.BrowserDownloadUrl)
+                && !ModReleaseSelector.IsChecksum(a.Name)))
+        {
+            if (!host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Could not read the latest release of {entry.GitHubRepo}.");
+
+            var repository = await _releases.FetchGitHubRepositoryAsync(ownerRepo, ct).ConfigureAwait(false);
+            if (repository is null)
+                throw new InvalidOperationException($"Could not read a release or source archive from {entry.GitHubRepo}.");
+
+            var repositoryName = ownerRepo[(ownerRepo.LastIndexOf('/') + 1)..];
+            if (repositoryName is "." or ".."
+                || repositoryName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+                || repositoryName.Contains('/') || repositoryName.Contains('\\'))
+                throw new InvalidOperationException($"The repository name in {entry.GitHubRepo} cannot be used as an addon folder name.");
+
+            var encodedRepo = string.Join('/', ownerRepo.Split('/').Select(Uri.EscapeDataString));
+            var encodedBranch = string.Join('/', repository.DefaultBranch.Split('/').Select(Uri.EscapeDataString));
+            var version = repository.PushedAt is { } pushedAt
+                ? $"source-{pushedAt.UtcDateTime:yyyyMMddHHmmss}"
+                : $"source-{repository.DefaultBranch}";
+            return new AddonReleaseSet(version,
+                [new GitHubReleaseAsset
+                {
+                    Name = $"{repositoryName}-{repository.DefaultBranch}.zip",
+                    BrowserDownloadUrl = $"https://github.com/{encodedRepo}/archive/refs/heads/{encodedBranch}.zip"
+                }],
+                repositoryName,
+                repository.DefaultBranch);
+        }
 
         var pool = release.Assets
             .Where(a => !string.IsNullOrWhiteSpace(a.Name) && !string.IsNullOrWhiteSpace(a.BrowserDownloadUrl))
@@ -231,11 +269,13 @@ public sealed class AddonManager
     {
         var assets = new List<GitHubReleaseAsset>();
         string version;
+        string? sourceFolderName = null;
         if (!string.IsNullOrWhiteSpace(entry.GitHubRepo))
         {
             var candidates = await ResolveReleaseAssetsAsync(entry, ct).ConfigureAwait(false);
             assets.AddRange(candidates.Assets);
             version = candidates.Tag;
+            sourceFolderName = candidates.SourceFolderName;
         }
         else
         {
@@ -303,6 +343,13 @@ public sealed class AddonManager
 
         if (folders.Count == 0)
             throw new InvalidDataException($"{Display(entry)}'s download did not contain a recognisable addon (no .toc file found).");
+
+        // GitHub source archives wrap repository-root files in a folder named
+        // "repo-branch". When the addon itself lives at that root, install it using
+        // the repository name (for example CallOfElements-master -> CallOfElements).
+        if (sourceFolderName is not null && folders.Count == 1
+            && string.Equals(Path.GetDirectoryName(folders[0].SourcePath), Path.GetFullPath(merged), StringComparison.OrdinalIgnoreCase))
+            folders[0] = folders[0] with { Name = sourceFolderName };
 
         var addOnsDir = ClientPaths.Resolve(clientDir, "Interface", "AddOns");
         Directory.CreateDirectory(addOnsDir);

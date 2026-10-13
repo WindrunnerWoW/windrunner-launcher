@@ -23,6 +23,8 @@ public sealed class GitHubRelease
     public List<GitHubReleaseAsset> Assets { get; set; } = [];
 }
 
+public sealed record GitHubRepository(string DefaultBranch, DateTimeOffset? PushedAt);
+
 public sealed class GitHubReleases
 {
     private readonly HttpClient _http;
@@ -43,6 +45,27 @@ public sealed class GitHubReleases
 
     public Task<GitHubRelease?> TagAsync(string ownerRepo, string tag, CancellationToken ct = default) =>
         FetchAsync($"https://api.github.com/repos/{ownerRepo}/releases/tags/{tag}", ct);
+
+    /// <summary>Returns the default branch and last push time for a public GitHub repository.</summary>
+    public async Task<GitHubRepository?> RepositoryAsync(string ownerRepo, CancellationToken ct = default)
+    {
+        using var doc = await FetchDocumentAsync($"https://api.github.com/repos/{ownerRepo}", ct).ConfigureAwait(false);
+        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object
+            || !doc.RootElement.TryGetProperty("default_branch", out var branchElement))
+            return null;
+
+        var branch = branchElement.GetString();
+        if (string.IsNullOrWhiteSpace(branch))
+            return null;
+
+        DateTimeOffset? pushedAt = doc.RootElement.TryGetProperty("pushed_at", out var pushedElement)
+            && pushedElement.ValueKind == JsonValueKind.String
+            && pushedElement.TryGetDateTimeOffset(out var parsedPushedAt)
+                ? parsedPushedAt
+                : null;
+
+        return new GitHubRepository(branch, pushedAt);
+    }
 
     /// <summary>The most recent releases, newest first. Null when the API cannot be reached.</summary>
     public async Task<IReadOnlyList<GitHubRelease>?> ListAsync(string ownerRepo, int perPage = 30, CancellationToken ct = default)
