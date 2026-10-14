@@ -232,12 +232,14 @@ public sealed class UpdateManager
     /// <summary>
     /// The highest-versioned published release that actually carries a server build. The same
     /// repository also hosts non-server releases (the rolling <c>Client</c> patch release), and
-    /// "latest" follows publish order, so it cannot be trusted on its own.
+    /// "latest" follows publish order, so it cannot be trusted on its own. Numeric hotfix tags
+    /// such as <c>1.18.3-1</c> are included even when GitHub marks them as prereleases.
     /// </summary>
     private async Task<GitHubRelease?> FindLatestServerReleaseAsync(string repo, CancellationToken ct)
     {
         var candidates = (await _releases.ListAsync(repo, ct: ct).ConfigureAwait(false) ?? [])
-            .Where(r => !r.Draft && !r.Prerelease && !string.IsNullOrWhiteSpace(r.TagName)
+            .Where(r => !r.Draft && (!r.Prerelease || IsNumericHotfixTag(r.TagName))
+                        && !string.IsNullOrWhiteSpace(r.TagName)
                         && ServerReleaseNames.Find(r) is not null)
             .ToList();
 
@@ -897,7 +899,14 @@ public sealed class UpdateManager
             return true;
 
         if (TryParseVersion(candidate, out var left) && TryParseVersion(current, out var right))
-            return left > right;
+        {
+            var baseComparison = left.CompareTo(right);
+            if (baseComparison != 0)
+                return baseComparison > 0;
+
+            return TryGetHotfixRevision(candidate, out var leftHotfix)
+                   && leftHotfix > GetHotfixRevision(current);
+        }
 
         return !string.Equals(candidate.Trim(), current.Trim(), StringComparison.OrdinalIgnoreCase);
     }
@@ -910,6 +919,30 @@ public sealed class UpdateManager
             cleaned = cleaned[..cut];
         return Version.TryParse(cleaned, out version!);
     }
+
+    private static bool IsNumericHotfixTag(string? tag) =>
+        tag is not null && TryParseVersion(tag, out _) && TryGetHotfixRevision(tag, out _);
+
+    /// <summary>Reads a positive numeric suffix such as <c>-1</c> as a hotfix revision.</summary>
+    private static bool TryGetHotfixRevision(string text, out int revision)
+    {
+        revision = 0;
+        var cleaned = text.Trim().TrimStart('v', 'V');
+        var dash = cleaned.LastIndexOf('-');
+        if (dash <= 0 || dash == cleaned.Length - 1)
+            return false;
+        if (!Version.TryParse(cleaned[..dash], out _))
+            return false;
+
+        var suffix = cleaned[(dash + 1)..];
+        if (suffix.Length > 1 && suffix[0] == '0')
+            return false;
+        return int.TryParse(suffix, System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out revision) && revision > 0;
+    }
+
+    private static int GetHotfixRevision(string text) =>
+        TryGetHotfixRevision(text, out var revision) ? revision : 0;
 
     private static T? TryRead<T>(string path, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo)
         where T : class
