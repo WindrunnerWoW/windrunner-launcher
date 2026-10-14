@@ -8,7 +8,7 @@
     <Company>Windrunner Launcher</Company>
     <Product>Windrunner Launcher</Product>
     <Copyright>Copyright (c) the Windrunner Launcher contributors</Copyright>
-    <Version>0.1.2</Version>
+    <Version>0.1.3</Version>
     <Authors>Windrunner Launcher contributors</Authors>
   </PropertyGroup>
 </Project>
