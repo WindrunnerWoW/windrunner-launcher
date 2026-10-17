@@ -39,6 +39,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     public event Action? OnboardingRequested;
+    public event Action? ClientLaunched;
     public event Action<string, string>? ErrorRequested;
     public event Action<RealmEntry?>? RealmEditorRequested;
     public event Action? ServerUpdateRequested;
@@ -293,7 +294,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             switch (action)
             {
                 case PlayActionKind.Play:
-                    await _runtime.Play.ExecuteAsync();
+                    var result = await _runtime.Play.ExecuteAsync();
+                    if (result.Game is not null && _runtime.State.Settings.MinimizeToTrayWhenClientStarts)
+                        ClientLaunched?.Invoke();
                     break;
                 case PlayActionKind.Update:
                     var realm = _runtime.State.SelectedRealm();

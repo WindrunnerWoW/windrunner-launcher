@@ -69,6 +69,7 @@ public sealed partial class MainWindow : Window
             return;
         _attachedViewModel = vm;
         vm.OnboardingRequested += ShowOnboarding;
+        vm.ClientLaunched += Hide;
         vm.ErrorRequested += ShowError;
         vm.RealmEditorRequested += ShowRealmEditor;
         vm.ServerUpdateRequested += ShowServerUpdate;
@@ -80,6 +81,7 @@ public sealed partial class MainWindow : Window
         if (_attachedViewModel is not { } vm)
             return;
         vm.OnboardingRequested -= ShowOnboarding;
+        vm.ClientLaunched -= Hide;
         vm.ErrorRequested -= ShowError;
         vm.RealmEditorRequested -= ShowRealmEditor;
         vm.ServerUpdateRequested -= ShowServerUpdate;
