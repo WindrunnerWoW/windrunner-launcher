@@ -127,6 +127,7 @@
   "server.backup.none": "No backups yet.",
   "settings.language": "Language",
   "settings.branding": "Show launcher wordmark",
+  "settings.tray.on.launch": "Minimize launcher to tray when the client starts",
   "settings.news": "Show news on the home page",
   "settings.light": "Light mode",
   "settings.updates": "Check for updates",

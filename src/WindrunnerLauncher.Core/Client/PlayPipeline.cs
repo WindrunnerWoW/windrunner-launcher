@@ -183,7 +183,7 @@ public sealed class PlayPipeline
         RealmlistWriter.Write(clientDir, host);
         Step($"realmlist set to {host}.");
 
-        if (realm.ClearWdb)
+        if (_state.Settings.ClearWdbOnClientStart || realm.ClearWdb)
         {
             var cleared = Wdb.ClearWdb(clientDir);
             Step(cleared.Count > 0 ? $"Cleared {cleared.Count} WDB cache directory(ies)." : "No WDB cache to clear.");

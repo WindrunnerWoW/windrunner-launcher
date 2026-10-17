@@ -7,6 +7,12 @@ public sealed class LauncherSettings
     public string Language { get; set; } = "en";
     public bool ShowBranding { get; set; } = true;
 
+    /// <summary>Hide the launcher to the system tray after starting the game client.</summary>
+    public bool MinimizeToTrayWhenClientStarts { get; set; }
+
+    /// <summary>Remove the client's WDB cache before every game launch.</summary>
+    public bool ClearWdbOnClientStart { get; set; } = true;
+
     /// <summary>When off, the news feed is never downloaded and the home artwork fills the page.</summary>
     public bool ShowNews { get; set; } = true;
     public bool LightMode { get; set; }

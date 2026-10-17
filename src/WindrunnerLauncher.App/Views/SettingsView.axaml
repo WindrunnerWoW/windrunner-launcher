@@ -32,6 +32,18 @@
                              FontSize="12" Classes="muted" />
                 </StackPanel>
                 <StackPanel Spacing="4">
+                  <ToggleSwitch Content="{Binding Texts[settings.tray.on.launch]}"
+                                IsChecked="{Binding MinimizeToTrayWhenClientStarts, Mode=TwoWay}" />
+                  <TextBlock Text="Hide the launcher to the system tray after the game starts. Click the tray icon to reopen it."
+                             FontSize="12" Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Spacing="4">
+                  <ToggleSwitch Content="Clear client cache on start"
+                                IsChecked="{Binding ClearWdbOnClientStart, Mode=TwoWay}" />
+                  <TextBlock Text="Delete the client’s entire WDB cache folder before each launch."
+                             FontSize="12" Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Spacing="4">
                   <ToggleSwitch Content="{Binding Texts[settings.news]}"
                                 IsChecked="{Binding ShowNews, Mode=TwoWay}" />
                   <TextBlock Text="When hidden, the news feed is not downloaded and the home artwork fills the page."

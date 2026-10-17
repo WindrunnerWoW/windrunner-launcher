@@ -119,6 +119,32 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         }
     }
 
+    public bool MinimizeToTrayWhenClientStarts
+    {
+        get => Main.Runtime.State.Settings.MinimizeToTrayWhenClientStarts;
+        set
+        {
+            if (Main.Runtime.State.Settings.MinimizeToTrayWhenClientStarts == value)
+                return;
+            Main.Runtime.State.Settings.MinimizeToTrayWhenClientStarts = value;
+            Save();
+            OnPropertyChanged();
+        }
+    }
+
+    public bool ClearWdbOnClientStart
+    {
+        get => Main.Runtime.State.Settings.ClearWdbOnClientStart;
+        set
+        {
+            if (Main.Runtime.State.Settings.ClearWdbOnClientStart == value)
+                return;
+            Main.Runtime.State.Settings.ClearWdbOnClientStart = value;
+            Save();
+            OnPropertyChanged();
+        }
+    }
+
     public bool ShowNews
     {
         get => Main.Runtime.State.Settings.ShowNews;
@@ -544,6 +570,8 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
     internal void Refresh()
     {
         OnPropertyChanged(nameof(ShowBranding));
+        OnPropertyChanged(nameof(MinimizeToTrayWhenClientStarts));
+        OnPropertyChanged(nameof(ClearWdbOnClientStart));
         OnPropertyChanged(nameof(ShowNews));
         OnPropertyChanged(nameof(MapsUpdateAvailable));
         UpdateMapsCommand.NotifyCanExecuteChanged();
