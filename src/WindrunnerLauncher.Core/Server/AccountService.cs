@@ -71,6 +71,24 @@ public sealed class AccountService
         await ApplyAccessAsync(quiet, id, gmLevel).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// True when the local realm's logon database already has an account. Used to decide whether
+    /// a fresh install still needs its first account; a missing database counts as no accounts.
+    /// </summary>
+    public async Task<bool> AnyAccountsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var quiet = await OpenAsync(ct).ConfigureAwait(false);
+            var count = await quiet("SELECT COUNT(*) FROM tw_logon.account").ConfigureAwait(false);
+            return int.TryParse(count.Trim(), out var total) && total > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>Updates the password hash for an existing account and clears session secrets.</summary>
     public async Task ChangePasswordAsync(string username, string password, CancellationToken ct = default)
     {

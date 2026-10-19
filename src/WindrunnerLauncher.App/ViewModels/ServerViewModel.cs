@@ -267,8 +267,11 @@ public sealed partial class ServerViewModel : RuntimeViewModel
     [RelayCommand(CanExecute = nameof(CanCreateAccount))]
     private void CreateAccount() => CreateAccountRequested?.Invoke();
 
-    public Task CreateAccountAsync(string username, string password) =>
-        Main.RunGuardedAsync(() => Main.Runtime.Server.CreateAccountAsync(username, password));
+    public async Task CreateAccountAsync(string username, string password)
+    {
+        if (await Main.RunGuardedAsync(() => Main.Runtime.Server.CreateAccountAsync(username, password)))
+            Main.MarkLocalAccountCreated();
+    }
 
     [RelayCommand(CanExecute = nameof(CanManageAccounts))]
     private void ChangePassword() => ChangePasswordRequested?.Invoke();
