@@ -256,16 +256,8 @@ public sealed class ClientManager
     /// </summary>
     public string? EnsureCleanExecutableBackup(string clientDir)
     {
-        var exe = FindExecutable(clientDir);
-        if (exe is null)
+        if (Mods.VanillaTweaks.EnsureCleanBackup(clientDir) is not { } backup)
             return null;
-
-        var backup = ClientPaths.Child(clientDir, CleanBackupFileName);
-        if (!File.Exists(backup))
-        {
-            backup = Path.Combine(clientDir, CleanBackupFileName);
-            File.Copy(exe, backup, overwrite: false);
-        }
 
         if (!string.Equals(_state.Settings.CleanWowExeBackupPath, backup, StringComparison.Ordinal))
         {
