@@ -462,6 +462,14 @@ public sealed class ZipRootHandler : IModHandler
     }
 }
 
+/// <summary>Raised when an executable patch fails. <c>WoW.exe</c> is left untouched in that case.</summary>
+public sealed class ExecutablePatchFailedException : InvalidOperationException
+{
+    public ExecutablePatchFailedException(string message) : base(message)
+    {
+    }
+}
+
 /// <summary>VanillaTweaks-style binary patching, always regenerated from the clean executable.</summary>
 public sealed class ExecutablePatchHandler : IModHandler
 {
@@ -474,9 +482,17 @@ public sealed class ExecutablePatchHandler : IModHandler
 
     public async Task<ModApplyOutcome> EnableAsync(ModApplyContext ctx, CancellationToken ct = default)
     {
+        // The clean backup must exist before the first patch. It is created here only when missing,
+        // and an existing backup is never replaced.
         var backup = ctx.CleanExecutableBackup;
+        var createdBackup = false;
         if (backup is null || !File.Exists(backup))
-            return ModApplyOutcome.Skip("No clean executable backup; refusing to patch a modified WoW.exe.");
+        {
+            backup = VanillaTweaks.EnsureCleanBackup(ctx.ClientDir);
+            createdBackup = backup is not null;
+        }
+        if (backup is null)
+            return ModApplyOutcome.Skip("No WoW executable to back up; refusing to patch.");
 
         var tool = LocateTool(ctx);
         var runner = OperatingSystem.IsWindows() ? null : LinuxRunner.ResolveInstalled(ctx.State.Settings, ctx.Paths);
@@ -485,9 +501,22 @@ public sealed class ExecutablePatchHandler : IModHandler
                 runner?.Runner, runner?.Prefix ?? ctx.Paths.WinePrefix)
             .ConfigureAwait(false);
 
+        var prefix = createdBackup
+            ? $"No clean backup existed, so {Path.GetFileName(backup)} was created from the current WoW.exe first. "
+            : "";
+
         if (result.Applied)
-            return ModApplyOutcome.Ok(result.Message);
-        return result.ToolMissing ? ModApplyOutcome.Skip(result.Message) : ModApplyOutcome.NoChange(result.Message);
+            return ModApplyOutcome.Ok(prefix + result.Message);
+        if (result.ToolMissing)
+            return ModApplyOutcome.Skip(prefix + result.Message);
+
+        // A failed patch must not leave the toggle reading "enabled". The exception rolls the state
+        // back, and the game is then started from the clean backup instead.
+        var detail = result.Output.Trim();
+        if (detail.Length > 800)
+            detail = "…" + detail[^800..];
+        throw new ExecutablePatchFailedException(
+            detail.Length == 0 ? result.Message : $"{result.Message}{Environment.NewLine}{detail}");
     }
 
     public Task<ModApplyOutcome> DisableAsync(ModApplyContext ctx, CancellationToken ct = default)

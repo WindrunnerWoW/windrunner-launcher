@@ -30,20 +30,25 @@ public static class VanillaTweaks
     public const string AppliedStateFileName = ".windrunner-launcher-vanillatweaks.state";
 
     /// <summary>
-    /// Command line flags of brndd/vanilla-tweaks. Collected here so a future CLI change is a
-    /// one-line edit rather than a hunt through the argument builder.
+    /// Command line flags of brndd/vanilla-tweaks 1.6.0. Most patches are on by default and are
+    /// switched off with a <c>--no-</c> flag, so the builder only emits flags that change a default.
+    /// Collected here so a future CLI change is a one-line edit rather than a hunt through the builder.
     /// </summary>
     public static class Flags
     {
         public const string Output = "-o";
-        public const string LargeAddressAware = "--largeaddressaware";
+        public const string NoLargeAddressAware = "--no-largeaddressaware";
         public const string FieldOfView = "--fov";
-        public const string MaxCameraDistance = "--maxcamdist";
+        public const string NoFieldOfView = "--no-fov";
+        public const string MaxCameraDistance = "--maxcameradistance";
         public const string FarClip = "--farclip";
+        public const string NoFarClip = "--no-farclip";
         public const string NameplateDistance = "--nameplatedistance";
-        public const string AutoLoot = "--autoloot";
-        public const string SoundInBackground = "--sound-in-background";
+        public const string NoNameplateDistance = "--no-nameplatedistance";
+        public const string NoQuickloot = "--no-quickloot";
+        public const string NoSoundInBackground = "--no-sound-in-background";
         public const string SoundChannels = "--soundchannels";
+        public const string NoSoundChannels = "--no-soundchannels";
     }
 
     /// <summary>TBC-era nameplate range in yards; vanilla ships with 20.</summary>
@@ -89,15 +94,20 @@ public static class VanillaTweaks
         var effective = settings.UseRecommendedPreset ? RecommendedPreset() : settings;
         var args = new List<string> { Flags.Output, outputPath };
 
-        if (effective.LargeAddressAware)
-            args.Add(Flags.LargeAddressAware);
+        if (!effective.LargeAddressAware)
+            args.Add(Flags.NoLargeAddressAware);
 
         if (effective.FieldOfViewRadians > 0)
         {
             args.Add(Flags.FieldOfView);
             args.Add(effective.FieldOfViewRadians.ToString("0.###", CultureInfo.InvariantCulture));
         }
+        else
+        {
+            args.Add(Flags.NoFieldOfView);
+        }
 
+        // The camera distance limit is opt-in upstream, so it is only passed when set.
         if (effective.CameraDistanceMax > 0)
         {
             args.Add(Flags.MaxCameraDistance);
@@ -109,23 +119,36 @@ public static class VanillaTweaks
             args.Add(Flags.FarClip);
             args.Add(effective.FarClip.ToString(CultureInfo.InvariantCulture));
         }
+        else
+        {
+            args.Add(Flags.NoFarClip);
+        }
 
         if (effective.NameplateRangeTbc)
         {
             args.Add(Flags.NameplateDistance);
             args.Add(TbcNameplateDistance.ToString(CultureInfo.InvariantCulture));
         }
+        else
+        {
+            args.Add(Flags.NoNameplateDistance);
+        }
 
-        if (effective.AlwaysAutoLoot)
-            args.Add(Flags.AutoLoot);
+        // Quickloot (automatic looting, hold Shift for manual) is on by default upstream.
+        if (!effective.AlwaysAutoLoot)
+            args.Add(Flags.NoQuickloot);
 
-        if (effective.SoundInBackground)
-            args.Add(Flags.SoundInBackground);
+        if (!effective.SoundInBackground)
+            args.Add(Flags.NoSoundInBackground);
 
         if (effective.MoreSoundChannels)
         {
             args.Add(Flags.SoundChannels);
             args.Add(ExtendedSoundChannels.ToString(CultureInfo.InvariantCulture));
+        }
+        else
+        {
+            args.Add(Flags.NoSoundChannels);
         }
 
         args.Add(inputPath);
@@ -284,6 +307,22 @@ public static class VanillaTweaks
         {
             try { Directory.Delete(work, recursive: true); } catch { }
         }
+    }
+
+    /// <summary>
+    /// Creates the clean backup from the live executable when none exists. An existing backup is
+    /// never overwritten, so it stays the untouched original for every later patch.
+    /// </summary>
+    public static string? EnsureCleanBackup(string clientDir)
+    {
+        var target = ClientManager.FindExecutable(clientDir);
+        if (target is null)
+            return null;
+
+        var backup = ClientPaths.Child(clientDir, ClientManager.CleanBackupFileName);
+        if (!File.Exists(backup))
+            File.Copy(target, backup, overwrite: false);
+        return backup;
     }
 
     /// <summary>Puts the clean executable back in place, undoing any executable patch.</summary>

@@ -172,10 +172,20 @@ public sealed class PlayPipeline
         if (OperatingSystem.IsLinux() && _runner is not null)
             await _runner.EnsureAsync(_state.Settings, Step, ct).ConfigureAwait(false);
 
-        var moves = await _mods.MaterializeAsync(realm, ct).ConfigureAwait(false);
-        foreach (var move in moves)
-            Step(move);
-        Step($"Mod state materialized for '{Describe(realm)}'.");
+        var launchFromBackup = false;
+        try
+        {
+            var moves = await _mods.MaterializeAsync(realm, ct).ConfigureAwait(false);
+            foreach (var move in moves)
+                Step(move);
+            Step($"Mod state materialized for '{Describe(realm)}'.");
+        }
+        catch (ExecutablePatchFailedException ex)
+        {
+            // WoW.exe was not touched, so the game still starts, from the clean backup this time.
+            launchFromBackup = true;
+            Step($"{ex.Message.Split(Environment.NewLine)[0]} Starting the clean backup instead.");
+        }
 
         WritePreferredMonitor(realm, clientDir, Step);
 
@@ -206,7 +216,7 @@ public sealed class PlayPipeline
                 : "Server is running, but readiness could not be confirmed.");
         }
 
-        var game = await LaunchWoWAsync(realm, clientDir, ct).ConfigureAwait(false);
+        var game = await LaunchWoWAsync(realm, clientDir, ct, launchFromBackup).ConfigureAwait(false);
         Step($"Launched {Path.GetFileName(game.Executable)} (pid {game.ProcessId}).");
 
         // The local server stays running after the game closes.
@@ -225,11 +235,18 @@ public sealed class PlayPipeline
     /// Starts the game. When <c>dlls.txt</c> lists something to inject and VanillaFixes is present,
     /// the loader is launched instead so the DLLs are actually loaded.
     /// </summary>
-    public async Task<LaunchedGame> LaunchWoWAsync(RealmEntry realm, string clientDir, CancellationToken ct = default)
+    public async Task<LaunchedGame> LaunchWoWAsync(
+        RealmEntry realm,
+        string clientDir,
+        CancellationToken ct = default,
+        bool useCleanBackup = false)
     {
         ct.ThrowIfCancellationRequested();
 
-        var target = ResolveGameExecutable(realm, clientDir);
+        var target = useCleanBackup
+            ? _client.CleanExecutableBackupFor(clientDir)
+              ?? throw new FileNotFoundException($"No clean backup in {clientDir} to start from.")
+            : ResolveGameExecutable(realm, clientDir);
         var loader = ClientPaths.Child(clientDir, LoaderExecutable);
         var useLoader = DllsTxt.HasEntries(clientDir) && File.Exists(loader);
 

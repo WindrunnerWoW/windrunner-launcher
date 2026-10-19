@@ -259,6 +259,8 @@ public sealed class MariaDbManager : IDisposable
             throw new FileNotFoundException($"no {_paths.MyIni} - run Full setup first", _paths.MyIni);
 
         var daemon = RequireDaemon();
+        // my.ini is only written during setup, so a port changed afterwards would never reach mysqld.
+        GenerateMyIni();
         var port = MysqlPort();
         AssertPort(port, daemon);
         if (MysqlReady())
