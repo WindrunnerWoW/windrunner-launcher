@@ -15,6 +15,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private int _refreshQueued;
     private int _logRefreshQueued;
 
+    /// <summary>Whether the first-run create-account decision has been made this session.</summary>
+    private bool _accountPromptResolved;
+
     public MainViewModel(LauncherRuntime runtime)
     {
         _runtime = runtime;
@@ -39,6 +42,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     public event Action? OnboardingRequested;
+    public event Action? CreateAccountPromptRequested;
     public event Action? ClientLaunched;
     public event Action<string, string>? ErrorRequested;
     public event Action<RealmEntry?>? RealmEditorRequested;
@@ -365,6 +369,61 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _ = CheckClientPatchesAsync(_runtime.State.SelectedRealm(), fetch: true);
     }
 
+    /// <summary>
+    /// On a fresh install the local realm has no accounts yet. The first time the server is ready,
+    /// offer the create-account dialog. Once it has any account, the offer is never shown again.
+    /// </summary>
+    private void MaybePromptForAccount()
+    {
+        if (_accountPromptResolved || IsBusy)
+            return;
+        if (_runtime.State.Settings.LocalAccountCreated)
+        {
+            _accountPromptResolved = true;
+            return;
+        }
+        if (Status.ServerState != ServerLifecycleState.Ready)
+            return;
+
+        _accountPromptResolved = true;
+        _ = ResolveFirstAccountAsync();
+    }
+
+    private async Task ResolveFirstAccountAsync()
+    {
+        bool hasAccount;
+        try
+        {
+            hasAccount = await _runtime.Server.AnyAccountsAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            hasAccount = false;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (hasAccount)
+            {
+                // An account already exists (e.g. created outside the launcher); don't nag.
+                MarkLocalAccountCreated();
+                return;
+            }
+
+            CreateAccountPromptRequested?.Invoke();
+        });
+    }
+
+    /// <summary>Records that the realm has an account, so the first-run offer is not shown again.</summary>
+    internal void MarkLocalAccountCreated()
+    {
+        var settings = _runtime.State.Settings;
+        if (settings.LocalAccountCreated)
+            return;
+        settings.LocalAccountCreated = true;
+        _runtime.State.SaveSettings();
+    }
+
     public void Refresh()
     {
         if (_disposed)
@@ -390,6 +449,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         LauncherReadiness = LauncherReadinessResolver.Resolve(
             Status,
             download is { Status: DownloadStatus.Running or DownloadStatus.RetryWait });
+        MaybePromptForAccount();
 
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(ShowBranding));

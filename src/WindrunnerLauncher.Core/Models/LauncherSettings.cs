@@ -20,6 +20,12 @@ public sealed class LauncherSettings
     public string LastSelectedRealmId { get; set; } = RealmEntry.LocalServerId;
     public bool CheckUpdatesOnStartup { get; set; } = true;
     public bool OnboardingCompleted { get; set; }
+
+    /// <summary>
+    /// Set once the local realm has an account. Until then, the first time the server is ready
+    /// after a fresh install the launcher offers the create-account dialog.
+    /// </summary>
+    public bool LocalAccountCreated { get; set; }
     public InstallChoice InstallChoice { get; set; } = InstallChoice.ClientAndLocalServer;
     public string? ClientPath { get; set; }
     public bool ClientIsManagedCopy { get; set; }

@@ -69,6 +69,7 @@ public sealed partial class MainWindow : Window
             return;
         _attachedViewModel = vm;
         vm.OnboardingRequested += ShowOnboarding;
+        vm.CreateAccountPromptRequested += ShowCreateAccount;
         vm.ClientLaunched += Hide;
         vm.ErrorRequested += ShowError;
         vm.RealmEditorRequested += ShowRealmEditor;
@@ -81,6 +82,7 @@ public sealed partial class MainWindow : Window
         if (_attachedViewModel is not { } vm)
             return;
         vm.OnboardingRequested -= ShowOnboarding;
+        vm.CreateAccountPromptRequested -= ShowCreateAccount;
         vm.ClientLaunched -= Hide;
         vm.ErrorRequested -= ShowError;
         vm.RealmEditorRequested -= ShowRealmEditor;
@@ -229,6 +231,15 @@ public sealed partial class MainWindow : Window
             DataContext = new OnboardingViewModel(ViewModel)
         };
         await window.ShowDialog(this);
+    }
+
+    private async void ShowCreateAccount()
+    {
+        if (ViewModel is not { } vm)
+            return;
+        var result = await new CreateAccountDialog().ShowDialog<AccountCredentials?>(this);
+        if (result is not null)
+            await vm.Server.CreateAccountAsync(result.Username, result.Password);
     }
 
     private async void ShowError(string title, string detail)

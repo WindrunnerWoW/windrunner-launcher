@@ -287,6 +287,10 @@ public sealed class ServerManager : IDisposable
     public Task CreateAccountAsync(string username, string password, int gmLevel = 0, CancellationToken ct = default) =>
         _accounts.CreateAccountAsync(username, password, gmLevel, ct);
 
+    /// <summary>True when the local realm already has at least one account.</summary>
+    public Task<bool> AnyAccountsAsync(CancellationToken ct = default) =>
+        _accounts.AnyAccountsAsync(ct);
+
     public Task ChangePasswordAsync(string username, string password, CancellationToken ct = default) =>
         _accounts.ChangePasswordAsync(username, password, ct);
 
