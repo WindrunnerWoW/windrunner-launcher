@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -9,6 +10,7 @@ using Avalonia.Platform;
 using WindrunnerLauncher.App.ViewModels;
 using WindrunnerLauncher.App.Views.Dialogs;
 using WindrunnerLauncher.Core.Models;
+using WindrunnerLauncher.Core.Updates;
 
 namespace WindrunnerLauncher.App.Views;
 
@@ -18,6 +20,8 @@ public sealed partial class MainWindow : Window
     private MainViewModel? _attachedViewModel;
     private bool _exitRequested;
     private bool _stopAndExitInProgress;
+    private bool _onboardingOpen;
+    private bool _launcherUpdatePromptPending;
 
     public MainWindow()
     {
@@ -75,6 +79,8 @@ public sealed partial class MainWindow : Window
         vm.RealmEditorRequested += ShowRealmEditor;
         vm.ServerUpdateRequested += ShowServerUpdate;
         vm.ServerRollbackRequested += ShowServerRollback;
+        vm.LauncherUpdateRequested += ShowLauncherUpdate;
+        vm.LauncherRestartRequested += RestartForLauncherUpdate;
     }
 
     private void DetachViewModel()
@@ -88,6 +94,8 @@ public sealed partial class MainWindow : Window
         vm.RealmEditorRequested -= ShowRealmEditor;
         vm.ServerUpdateRequested -= ShowServerUpdate;
         vm.ServerRollbackRequested -= ShowServerRollback;
+        vm.LauncherUpdateRequested -= ShowLauncherUpdate;
+        vm.LauncherRestartRequested -= RestartForLauncherUpdate;
         _attachedViewModel = null;
     }
 
@@ -121,6 +129,55 @@ public sealed partial class MainWindow : Window
             texts["server.update.restore.confirm"]).ShowDialog<bool>(this);
         if (confirmed)
             await vm.RollbackServerConfirmedAsync();
+    }
+
+    private async void ShowLauncherUpdate()
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        // Onboarding owns the screen on a fresh install; show the update prompt once it closes.
+        if (_onboardingOpen)
+        {
+            _launcherUpdatePromptPending = true;
+            return;
+        }
+
+        if (!vm.LauncherUpdateAvailable)
+            return;
+
+        var choice = await new LauncherUpdateDialog(vm).ShowDialog<LauncherUpdateChoice>(this);
+        switch (choice)
+        {
+            case LauncherUpdateChoice.Update:
+                await vm.InstallLauncherUpdateAsync();
+                break;
+            case LauncherUpdateChoice.Ignore:
+                vm.IgnoreLauncherUpdateCommand.Execute(null);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The staged build is already swapped into place by <see cref="LauncherSelfUpdate.Stage"/>;
+    /// this just relaunches the same path and lets the outgoing process exit normally.
+    /// </summary>
+    private static void RestartForLauncherUpdate()
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo(LauncherSelfUpdate.CurrentExecutablePath())
+            {
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // Best effort — the user can relaunch manually if this fails.
+            return;
+        }
+
+        (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
     }
 
     private void WindowOpened(object? sender, EventArgs e)
@@ -230,7 +287,21 @@ public sealed partial class MainWindow : Window
         {
             DataContext = new OnboardingViewModel(ViewModel)
         };
-        await window.ShowDialog(this);
+        _onboardingOpen = true;
+        try
+        {
+            await window.ShowDialog(this);
+        }
+        finally
+        {
+            _onboardingOpen = false;
+        }
+
+        if (_launcherUpdatePromptPending)
+        {
+            _launcherUpdatePromptPending = false;
+            ShowLauncherUpdate();
+        }
     }
 
     private async void ShowCreateAccount()

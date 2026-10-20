@@ -83,6 +83,7 @@ public class JsonStoreTests
             ClientIsManagedCopy = false,
             CleanWowExeBackupPath = @"C:\Games\Turtle\WoW-OriginalBackup.exe",
             IgnoredServerRelease = "0.2.0",
+            IgnoredLauncherVersion = "1.4.0",
             InstalledServerVersion = "0.1.9",
             InstalledClientManifestVersion = "2024.1",
             HealthySelfUpdate = false,
@@ -126,6 +127,7 @@ public class JsonStoreTests
         Assert.False(loaded.ClientIsManagedCopy);
         Assert.Equal(@"C:\Games\Turtle\WoW-OriginalBackup.exe", loaded.CleanWowExeBackupPath);
         Assert.Equal("0.2.0", loaded.IgnoredServerRelease);
+        Assert.Equal("1.4.0", loaded.IgnoredLauncherVersion);
         Assert.Equal("0.1.9", loaded.InstalledServerVersion);
         Assert.Equal("2024.1", loaded.InstalledClientManifestVersion);
         Assert.False(loaded.HealthySelfUpdate);

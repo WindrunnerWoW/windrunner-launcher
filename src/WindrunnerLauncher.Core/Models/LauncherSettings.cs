@@ -31,6 +31,9 @@ public sealed class LauncherSettings
     public bool ClientIsManagedCopy { get; set; }
     public string? CleanWowExeBackupPath { get; set; }
     public string? IgnoredServerRelease { get; set; }
+
+    /// <summary>Launcher version the user chose to ignore; a newer build still prompts again.</summary>
+    public string? IgnoredLauncherVersion { get; set; }
     public string? InstalledServerVersion { get; set; }
     public string? InstalledClientManifestVersion { get; set; }
     public bool HealthySelfUpdate { get; set; } = true;

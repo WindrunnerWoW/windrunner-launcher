@@ -127,10 +127,17 @@
                 </Border>
 
                 <Separator />
-                <StackPanel Spacing="4">
-                  <ToggleSwitch Content="{Binding Texts[settings.ignore.server]}"
-                                IsChecked="{Binding IgnoreServerVersion}" />
-                  <TextBlock Text="{Binding IgnoredVersionText}" Classes="muted" FontSize="12" />
+                <StackPanel Spacing="10">
+                  <StackPanel Spacing="4">
+                    <ToggleSwitch Content="{Binding Texts[settings.ignore.launcher]}"
+                                  IsChecked="{Binding IgnoreLauncherVersion}" />
+                    <TextBlock Text="{Binding IgnoredLauncherVersionText}" Classes="muted" FontSize="12" />
+                  </StackPanel>
+                  <StackPanel Spacing="4">
+                    <ToggleSwitch Content="{Binding Texts[settings.ignore.server]}"
+                                  IsChecked="{Binding IgnoreServerVersion}" />
+                    <TextBlock Text="{Binding IgnoredVersionText}" Classes="muted" FontSize="12" />
+                  </StackPanel>
                 </StackPanel>
               </StackPanel>
             </Border>

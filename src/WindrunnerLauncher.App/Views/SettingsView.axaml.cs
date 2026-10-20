@@ -1,11 +1,9 @@
 using System.Diagnostics;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 using Avalonia.Markup.Xaml;
 using WindrunnerLauncher.App.ViewModels;
 using WindrunnerLauncher.App.Views.Dialogs;
-using WindrunnerLauncher.Core.Updates;
 
 namespace WindrunnerLauncher.App.Views;
 
@@ -29,7 +27,6 @@ public sealed partial class SettingsView : UserControl
         _attachedViewModel = vm;
         vm.RepairWorldRequested += ConfirmRepairWorld;
         vm.GitHubBrowserOpenRequested += OpenGitHubVerificationUrl;
-        vm.LauncherRestartRequested += RestartForUpdate;
     }
 
     private void Detach()
@@ -38,30 +35,7 @@ public sealed partial class SettingsView : UserControl
             return;
         vm.RepairWorldRequested -= ConfirmRepairWorld;
         vm.GitHubBrowserOpenRequested -= OpenGitHubVerificationUrl;
-        vm.LauncherRestartRequested -= RestartForUpdate;
         _attachedViewModel = null;
-    }
-
-    /// <summary>
-    /// The staged build is already swapped into place by <see cref="LauncherSelfUpdate.Stage"/>;
-    /// this just relaunches the same path and lets the outgoing process exit normally.
-    /// </summary>
-    private static void RestartForUpdate()
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo(LauncherSelfUpdate.CurrentExecutablePath())
-            {
-                UseShellExecute = true
-            });
-        }
-        catch
-        {
-            // Best effort — the user can relaunch manually if this fails.
-            return;
-        }
-
-        (Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
     }
 
     private static void OpenGitHubVerificationUrl(string url)

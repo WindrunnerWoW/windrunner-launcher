@@ -1,0 +1,53 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:WindrunnerLauncher.App.Controls"
+        x:Class="WindrunnerLauncher.App.Views.Dialogs.LauncherUpdateDialog"
+        Width="520"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        Background="Transparent">
+  <Panel>
+    <Border Classes="dialog-surface" Margin="16" Padding="20">
+      <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14">
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <Border Classes="update-arrow" VerticalAlignment="Center">
+            <Path Data="M 7,1 L 13,7.5 M 7,1 L 1,7.5 M 7,1 L 7,14"
+                  Stroke="{DynamicResource SuccessBrush}"
+                  StrokeThickness="2.2"
+                  StrokeLineCap="Round"
+                  StrokeJoin="Round"
+                  Width="14"
+                  Height="15"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center" />
+          </Border>
+          <StackPanel VerticalAlignment="Center" Spacing="2">
+            <TextBlock x:Name="HeadingText" Classes="subheading" />
+            <TextBlock x:Name="VersionsText" Classes="muted" />
+          </StackPanel>
+        </StackPanel>
+
+        <TextBlock x:Name="BodyText" Grid.Row="1" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+
+        <StackPanel x:Name="NotesPanel" Grid.Row="2" Spacing="6" IsVisible="False">
+          <TextBlock x:Name="NotesHeading" Classes="eyebrow" />
+          <Border Classes="release-notes">
+            <ScrollViewer MaxHeight="180">
+              <SelectableTextBlock x:Name="NotesText" TextWrapping="Wrap" FontSize="12" />
+            </ScrollViewer>
+          </Border>
+        </StackPanel>
+
+        <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto">
+          <controls:LauncherButton x:Name="IgnoreButton" Click="IgnoreClicked" />
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+            <controls:LauncherButton x:Name="SkipButton" Click="SkipClicked" />
+            <controls:LauncherButton x:Name="UpdateButton" Classes="accent" Click="UpdateClicked" />
+          </StackPanel>
+        </Grid>
+      </Grid>
+    </Border>
+  </Panel>
+</Window>

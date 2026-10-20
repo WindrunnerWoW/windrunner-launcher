@@ -318,6 +318,24 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         ? "No server release is ignored."
         : $"Ignoring {Main.Runtime.State.Settings.IgnoredServerRelease}";
 
+    public bool IgnoreLauncherVersion
+    {
+        get => !string.IsNullOrWhiteSpace(Main.Runtime.State.Settings.IgnoredLauncherVersion);
+        set
+        {
+            if (value)
+                Main.Runtime.Updates.IgnoreLauncherVersion();
+            else
+                Main.Runtime.Updates.ClearIgnoredLauncherVersion();
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IgnoredLauncherVersionText));
+        }
+    }
+
+    public string IgnoredLauncherVersionText => string.IsNullOrWhiteSpace(Main.Runtime.State.Settings.IgnoredLauncherVersion)
+        ? "No launcher version is ignored."
+        : $"Ignoring launcher v{Main.Runtime.State.Settings.IgnoredLauncherVersion}";
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasUpdateCheckStatus))]
     private string _updateCheckStatus = "";
@@ -388,8 +406,6 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
 
     public bool HasLauncherUpdateStatus => LauncherUpdateStatus.Length > 0;
 
-    public event Action? LauncherRestartRequested;
-
     [RelayCommand]
     private async Task InstallLauncherUpdateAsync()
     {
@@ -404,7 +420,7 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         if (ok)
         {
             LauncherUpdateStatus = "Update staged. Restarting…";
-            LauncherRestartRequested?.Invoke();
+            Main.RequestLauncherRestart();
         }
         else
         {
@@ -581,6 +597,8 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         NotifyClientPath();
         OnPropertyChanged(nameof(IgnoreServerVersion));
         OnPropertyChanged(nameof(IgnoredVersionText));
+        OnPropertyChanged(nameof(IgnoreLauncherVersion));
+        OnPropertyChanged(nameof(IgnoredLauncherVersionText));
         OnPropertyChanged(nameof(CanRepairWorld));
         OnPropertyChanged(nameof(LauncherUpdateAvailable));
         OnPropertyChanged(nameof(LauncherUpdateVersionText));
