@@ -87,6 +87,19 @@
                   <NumericUpDown Value="{Binding MysqlPort}" Minimum="1" Maximum="65535" Increment="1"
                                  FormatString="0" ParsingNumberStyle="Integer" />
                 </StackPanel>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                  <StackPanel>
+                    <TextBlock Text="AUTH SERVER PORT" Classes="eyebrow" />
+                    <NumericUpDown Value="{Binding AuthPort}" Minimum="1" Maximum="65535" Increment="1"
+                                   FormatString="0" ParsingNumberStyle="Integer" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="1">
+                    <TextBlock Text="MANGOSD PORT" Classes="eyebrow" />
+                    <NumericUpDown Value="{Binding WorldPort}" Minimum="1" Maximum="65535" Increment="1"
+                                   FormatString="0" ParsingNumberStyle="Integer"
+                                   ToolTip.Tip="World server port (WorldServerPort in mangosd.conf and the advertised realmlist port)" />
+                  </StackPanel>
+                </Grid>
                 <ToggleSwitch Content="Start server with client" IsChecked="{Binding StartWithClient}" />
                 <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
                   <controls:LauncherButton Classes="server-action" Content="{Binding Texts[server.account.create]}"

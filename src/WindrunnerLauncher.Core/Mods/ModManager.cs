@@ -39,6 +39,7 @@ public sealed class ModManager : IManagedAssetRepairer
     private readonly StateStore _state;
     private readonly DownloadManager _downloads;
     private readonly ReleaseCatalog? _releases;
+    private readonly string _remoteManifestUrl;
 
     private ClientManifest _manifest = new();
 
@@ -48,12 +49,18 @@ public sealed class ModManager : IManagedAssetRepairer
     public ModManifestSource ManifestSource { get; private set; } = new();
     public IReadOnlyList<ManagedAsset> Assets => _manifest.Assets;
 
-    public ModManager(LauncherPaths paths, StateStore state, DownloadManager downloads, ReleaseCatalog? releases = null)
+    public ModManager(
+        LauncherPaths paths,
+        StateStore state,
+        DownloadManager downloads,
+        ReleaseCatalog? releases = null,
+        string? remoteManifestUrl = null)
     {
         _paths = paths;
         _state = state;
         _downloads = downloads;
         _releases = releases;
+        _remoteManifestUrl = string.IsNullOrWhiteSpace(remoteManifestUrl) ? RemoteManifestUrl : remoteManifestUrl;
         ReloadManifest();
     }
 
@@ -117,7 +124,7 @@ public sealed class ModManager : IManagedAssetRepairer
             {
                 Id = "client-manifest",
                 DisplayName = CachedEnvelopeFileName,
-                Url = RemoteManifestUrl,
+                Url = _remoteManifestUrl,
                 DestinationPath = tmp,
                 MaxAttempts = 2,
                 RetryDelay = TimeSpan.FromSeconds(5)

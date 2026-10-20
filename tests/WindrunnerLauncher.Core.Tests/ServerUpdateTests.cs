@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Net;
 using System.Text.Json;
 using WindrunnerLauncher.Core.Downloads;
+using WindrunnerLauncher.Core.Models;
 using WindrunnerLauncher.Core.Mods;
 using WindrunnerLauncher.Core.Persistence;
 using WindrunnerLauncher.Core.Security;
@@ -119,6 +120,27 @@ public class ServerUpdateTests
         Assert.Contains(stages, s => s.Id == "update-start" && s.Completed);
         Assert.DoesNotContain(stages, s => s.Failed);
         Assert.Equal(ServerLifecycleState.Stopped, env.Server.State);
+    }
+
+    [Fact]
+    public async Task Update_RefreshesMapsFromTheLatestSignedManifest()
+    {
+        using var env = new Env();
+        env.InstallServer("1.18.1");
+        env.RemoteManifest = new ClientManifest
+        {
+            Maps = new ClientBootstrap { DisplayName = "Maps", Url = env.MapsUrl, Sha256 = env.MapsSha }
+        };
+        env.Releases = [Release("1.18.2")];
+        await env.Updates.CheckServerAsync();
+
+        await env.Updates.UpdateServerAsync();
+
+        Assert.Equal("new dbc", File.ReadAllText(Path.Combine(env.Paths.Maps, "dbc", "x.bin")));
+        Assert.Equal("new maps", File.ReadAllText(Path.Combine(env.Paths.Maps, "maps", "x.bin")));
+        Assert.Equal("new vmaps", File.ReadAllText(Path.Combine(env.Paths.Maps, "vmaps", "x.bin")));
+        Assert.Equal("new mmaps", File.ReadAllText(Path.Combine(env.Paths.Maps, "mmaps", "x.bin")));
+        Assert.False(env.Updates.MapsUpdateAvailable);
     }
 
     [Fact]
@@ -303,10 +325,22 @@ public class ServerUpdateTests
 
         public LauncherPaths Paths { get; }
         public StateStore State { get; }
+        public ModManager Mods { get; }
         public ServerManager Server { get; }
         public UpdateManager Updates { get; }
         public FakeDatabaseBackup Database { get; } = new();
         public List<ReleaseSpec> Releases { get; set; } = [];
+
+        public ClientManifest RemoteManifest { get; set; } = new();
+
+        public byte[] MapsZip { get; set; } = Zip(
+            ("dbc/x.bin", "new dbc"),
+            ("maps/x.bin", "new maps"),
+            ("vmaps/x.bin", "new vmaps"),
+            ("mmaps/x.bin", "new mmaps"));
+
+        public string MapsUrl => _assets.Url("maps.zip");
+        public string MapsSha => Checksums.Sha256Hex(MapsZip);
 
         public byte[] ServerZip { get; set; } = Zip(
             ("windrunner-wow-windows-server/mangosd.exe", "new mangosd"),
@@ -325,16 +359,32 @@ public class ServerUpdateTests
             State = new StateStore(Paths);
             _assets = new LoopbackHttpServer(async (ctx, _) =>
             {
-                var body = ctx.Request.Url!.AbsolutePath.Contains("sql") ? SqlZip : ServerZip;
+                var path = ctx.Request.Url!.AbsolutePath;
+                if (path.EndsWith("client.manifest.json", StringComparison.Ordinal))
+                {
+                    var payload = JsonSerializer.Serialize(RemoteManifest, JsonStore.Options);
+                    var envelope = DevSigningKeys.SignEnvelope(TrustDomain.Client, payload);
+                    await LoopbackHttpServer.WriteAsync(
+                        ctx, JsonSerializer.SerializeToUtf8Bytes(envelope, JsonStore.Options));
+                    return;
+                }
+
+                if (path.EndsWith("maps.zip", StringComparison.Ordinal))
+                {
+                    await LoopbackHttpServer.WriteAsync(ctx, MapsZip);
+                    return;
+                }
+
+                var body = path.Contains("sql") ? SqlZip : ServerZip;
                 await LoopbackHttpServer.WriteAsync(ctx, body);
             });
             _api = new HttpClient(new ApiHandler(this));
             _downloads = new DownloadManager();
             _maria = new MariaDbManager(Paths, State);
-            Server = new ServerManager(Paths, State, _maria, downloads: _downloads);
-            var mods = new ModManager(Paths, State, _downloads);
+            Mods = new ModManager(Paths, State, _downloads, remoteManifestUrl: _assets.Url("client.manifest.json"));
+            Server = new ServerManager(Paths, State, _maria, mods: Mods, downloads: _downloads);
             Updates = new UpdateManager(
-                Paths, State, _downloads, Server, mods, new BackupRollbackManager(Paths, State),
+                Paths, State, _downloads, Server, Mods, new BackupRollbackManager(Paths, State),
                 new GitHubReleases(_api), Database)
             {
                 ServerDownloadRetryDelay = TimeSpan.Zero,

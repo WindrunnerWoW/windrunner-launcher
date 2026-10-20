@@ -240,6 +240,16 @@ public sealed partial class ServerViewModel : RuntimeViewModel
         get => Settings.MysqlPort;
         set { Settings.MysqlPort = value; SaveSettings(); OnPropertyChanged(); }
     }
+    public int AuthPort
+    {
+        get => Settings.AuthPort;
+        set { Settings.AuthPort = value; SaveSettings(); OnPropertyChanged(); }
+    }
+    public int WorldPort
+    {
+        get => Settings.WorldPort;
+        set { Settings.WorldPort = value; SaveSettings(); OnPropertyChanged(); }
+    }
     public bool StartWithClient
     {
         get => Settings.StartServerWithClient;
@@ -401,6 +411,11 @@ public sealed partial class ServerViewModel : RuntimeViewModel
         OnPropertyChanged(nameof(StateDetail));
         OnPropertyChanged(nameof(IsInstalled));
         OnPropertyChanged(nameof(IsRunning));
+        OnPropertyChanged(nameof(RealmName));
+        OnPropertyChanged(nameof(RealmAddress));
+        OnPropertyChanged(nameof(MysqlPort));
+        OnPropertyChanged(nameof(AuthPort));
+        OnPropertyChanged(nameof(WorldPort));
         OnPropertyChanged(nameof(InstalledVersionText));
         OnPropertyChanged(nameof(LatestVersionText));
         OnPropertyChanged(nameof(HasServerUpdate));

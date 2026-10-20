@@ -8,14 +8,26 @@ namespace WindrunnerLauncher.App.ViewModels;
 public sealed partial class RealmEditViewModel : ObservableObject
 {
     private readonly RealmEntry? _existing;
-    private readonly int _authPort;
+    private readonly int _defaultAuthPort;
 
-    public RealmEditViewModel(RealmEntry? existing = null)
+    /// <param name="existing">The realm being edited, or null when adding one.</param>
+    /// <param name="defaultAuthPort">
+    /// The port the client uses when no override is enabled. The local server's auth port follows
+    /// the server settings; remote realms fall back to the vanilla default.
+    /// </param>
+    public RealmEditViewModel(RealmEntry? existing = null, int defaultAuthPort = RealmlistWriter.DefaultAuthPort)
     {
         _existing = existing;
+        _defaultAuthPort = defaultAuthPort is > 0 and <= 65535 ? defaultAuthPort : RealmlistWriter.DefaultAuthPort;
+
         _displayName = existing?.DisplayName ?? "";
-        _authPort = existing?.AuthPort ?? RealmlistWriter.DefaultAuthPort;
-        _address = FormatAddress(existing?.Address ?? "", _authPort);
+        // Older entries could carry a ":port" suffix in the address; it moves to the port field.
+        var (host, inlinePort) = RealmlistWriter.SplitHostAndPort(existing?.Address ?? "");
+        _address = host;
+        _authPort = inlinePort ?? existing?.AuthPort ?? _defaultAuthPort;
+        _advanced = inlinePort is not null
+                    || (existing?.AuthPortOverride ?? false)
+                    || (existing is not null && existing.AuthPort != _defaultAuthPort);
         _clientDirectory = existing?.ClientDirectoryOverride;
         _clearWdb = existing?.ClearWdb ?? false;
     }
@@ -36,6 +48,15 @@ public sealed partial class RealmEditViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanSave))]
     private string _address;
 
+    /// <summary>Reveals the client-side auth port. Off means "use the default port".</summary>
+    [ObservableProperty]
+    private bool _advanced;
+
+    [ObservableProperty]
+    private int _authPort;
+
+    public string DefaultPortHint => $"Uses the default port {_defaultAuthPort}.";
+
     [ObservableProperty]
     private string? _clientDirectory;
 
@@ -47,9 +68,22 @@ public sealed partial class RealmEditViewModel : ObservableObject
     {
         var realm = _existing ?? new RealmEntry();
         realm.DisplayName = DisplayName.Trim();
-        ParseHostAndPort(Address, _authPort, out var host, out var port);
+
+        // An inline ":port" still wins, so addresses typed the old way keep working.
+        var (host, inlinePort) = RealmlistWriter.SplitHostAndPort(Address);
         realm.Address = host;
-        realm.AuthPort = port;
+        var port = inlinePort ?? (Advanced && AuthPort is > 0 and <= 65535 ? AuthPort : (int?)null);
+        if (port is { } clientPort)
+        {
+            realm.AuthPort = clientPort;
+            realm.AuthPortOverride = true;
+        }
+        else
+        {
+            realm.AuthPort = _defaultAuthPort;
+            realm.AuthPortOverride = false;
+        }
+
         realm.ClientDirectoryOverride = string.IsNullOrWhiteSpace(ClientDirectory) ? null : ClientDirectory.Trim();
         realm.ClearWdb = ClearWdb;
         Saved?.Invoke(realm);
@@ -57,31 +91,4 @@ public sealed partial class RealmEditViewModel : ObservableObject
 
     [RelayCommand]
     private void Cancel() => Cancelled?.Invoke();
-
-    private static string FormatAddress(string address, int authPort)
-    {
-        var host = (address ?? "").Trim();
-        if (host.Length == 0)
-            return "";
-        return RealmlistWriter.FormatHost(host, authPort);
-    }
-
-    private static void ParseHostAndPort(string raw, int fallbackPort, out string host, out int port)
-    {
-        host = (raw ?? "").Trim();
-        port = fallbackPort is > 0 and <= 65535 ? fallbackPort : RealmlistWriter.DefaultAuthPort;
-        if (host.Length == 0)
-            return;
-
-        var lastColon = host.LastIndexOf(':');
-        if (lastColon <= 0 || lastColon == host.Length - 1)
-            return;
-        if (host.IndexOf(':') != lastColon)
-            return;
-        if (!int.TryParse(host[(lastColon + 1)..], out var parsed) || parsed is <= 0 or > 65535)
-            return;
-
-        host = host[..lastColon];
-        port = parsed;
-    }
 }

@@ -39,6 +39,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         runtime.Server.StateChanged += RuntimeChanged;
         runtime.Server.OutputReceived += ServerOutputReceived;
         runtime.Loc.Changed += LanguageChanged;
+        runtime.Play.GameExited += OnGameExited;
         Refresh();
         if (runtime.State.Settings.CheckUpdatesOnStartup)
             _ = CheckUpdatesInBackgroundAsync();
@@ -50,6 +51,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public event Action? OnboardingRequested;
     public event Action? CreateAccountPromptRequested;
     public event Action? ClientLaunched;
+
+    /// <summary>Raised when the game client started from this launcher exits.</summary>
+    public event Action? ClientExited;
+
     public event Action<string, string>? ErrorRequested;
     public event Action<RealmEntry?>? RealmEditorRequested;
     public event Action? ServerUpdateRequested;
@@ -678,6 +683,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return $"{value:0.#} {units[unit]}";
     }
 
+    private void OnGameExited()
+    {
+        if (_disposed)
+            return;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!_disposed)
+                ClientExited?.Invoke();
+        });
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -687,6 +704,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _runtime.Server.StateChanged -= RuntimeChanged;
         _runtime.Server.OutputReceived -= ServerOutputReceived;
         _runtime.Loc.Changed -= LanguageChanged;
+        _runtime.Play.GameExited -= OnGameExited;
         Mods.Addons.Dispose();
         Home.Dispose();
         Settings.Dispose();

@@ -34,7 +34,7 @@
                 <StackPanel Spacing="4">
                   <ToggleSwitch Content="{Binding Texts[settings.tray.on.launch]}"
                                 IsChecked="{Binding MinimizeToTrayWhenClientStarts, Mode=TwoWay}" />
-                  <TextBlock Text="Hide the launcher to the system tray after the game starts. Click the tray icon to reopen it."
+                  <TextBlock Text="Hide the launcher to the system tray after the game starts. Click the tray icon to reopen it early; it comes back on its own when the game exits."
                              FontSize="12" Classes="muted" TextWrapping="Wrap" />
                 </StackPanel>
                 <StackPanel Spacing="4">

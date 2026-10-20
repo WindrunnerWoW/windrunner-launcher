@@ -33,6 +33,16 @@ public sealed class LaunchedGame
     public required int ProcessId { get; init; }
     public required string Executable { get; init; }
     public required string WorkingDirectory { get; init; }
+
+    /// <summary>Full path of the game executable, which can differ from the launched loader.</summary>
+    public required string GameExecutable { get; init; }
+
+    /// <summary>Game processes that were already running before this launch, so they are not tracked.</summary>
+    public IReadOnlyList<int> PreexistingProcessIds { get; init; } = [];
+
+    /// <summary>Job-object tracker for the whole launch tree, when available.</summary>
+    internal ProcessGroup? Group { get; init; }
+
     public IReadOnlyList<string> Arguments { get; init; } = [];
     public bool ThroughLoader { get; init; }
 }
@@ -220,7 +230,7 @@ public sealed class PlayPipeline
         Step($"Launched {Path.GetFileName(game.Executable)} (pid {game.ProcessId}).");
 
         // The local server stays running after the game closes.
-        TrackProcess(game.ProcessId);
+        TrackProcess(game);
 
         return new PlayResult
         {
@@ -252,6 +262,10 @@ public sealed class PlayPipeline
 
         var fileName = useLoader ? loader : target;
         var arguments = useLoader ? new List<string> { Path.GetFileName(target) } : new List<string>();
+
+        // VanillaFixes exits once the game is running, so remember which game processes already
+        // existed in order to pick out the one this launch creates.
+        var preexisting = useLoader ? ProcessHost.ProcessesByImage(target) : [];
 
         Process process;
         if (!OperatingSystem.IsWindows() && WineHost.IsWindowsImage(fileName))
@@ -296,6 +310,9 @@ public sealed class PlayPipeline
                 ProcessId = process.Id,
                 Executable = fileName,
                 WorkingDirectory = clientDir,
+                GameExecutable = target,
+                PreexistingProcessIds = preexisting,
+                Group = ProcessGroup.Attach(process),
                 Arguments = arguments,
                 ThroughLoader = useLoader
             };
@@ -369,15 +386,39 @@ public sealed class PlayPipeline
         step($"Multi-monitor fix set to display {index.Value}.");
     }
 
-    private void TrackProcess(int processId)
+    private void TrackProcess(LaunchedGame game)
     {
-        TrackedProcessId = processId;
+        TrackedProcessId = game.ProcessId;
 
         _ = Task.Run(async () =>
         {
             try
             {
-                await Platform.ProcessHost.WaitGoneAsync(processId, TimeSpan.FromDays(30)).ConfigureAwait(false);
+                if (game.Group is { } group)
+                {
+                    try
+                    {
+                        await group.WaitForExitAsync(TimeSpan.FromDays(30)).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        group.Dispose();
+                    }
+                }
+                else
+                {
+                    var pid = game.ProcessId;
+                    if (game.ThroughLoader)
+                    {
+                        // The loader hands off to the game and exits immediately, so wait for the
+                        // game process itself; 30 days far exceeds any real session.
+                        pid = await WaitForGameProcessAsync(game, TimeSpan.FromSeconds(30)).ConfigureAwait(false)
+                              ?? game.ProcessId;
+                        TrackedProcessId = pid;
+                    }
+
+                    await Platform.ProcessHost.WaitGoneAsync(pid, TimeSpan.FromDays(30)).ConfigureAwait(false);
+                }
             }
             catch
             {
@@ -387,6 +428,21 @@ public sealed class PlayPipeline
             TrackedProcessId = null;
             GameExited?.Invoke();
         });
+    }
+
+    private static async Task<int?> WaitForGameProcessAsync(LaunchedGame game, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var pid = Platform.ProcessHost.ProcessesByImage(game.GameExecutable)
+                .FirstOrDefault(id => !game.PreexistingProcessIds.Contains(id));
+            if (pid != 0)
+                return pid;
+            await Task.Delay(250).ConfigureAwait(false);
+        }
+
+        return null;
     }
 
     private static void ValidateRealm(RealmEntry realm)

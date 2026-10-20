@@ -620,10 +620,13 @@ public sealed class UpdateManager
                 log.Add($"Installed server {tag}.");
 
                 // dbc/maps/vmaps/mmaps follow the signed client manifest, not the server release.
-                // Fetching is a no-op when that entry is unchanged, so this only downloads new data.
+                // Refresh that manifest first so maps published since the last update check are
+                // picked up too. Fetching is then a no-op when the maps entry is unchanged, so
+                // this only downloads data that actually changed.
                 // Maps are not part of the rollback backup, so a failure is reported instead of undone.
                 try
                 {
+                    await _mods.RefreshFromRemoteAsync(ct).ConfigureAwait(false);
                     await _server.Fetch.FetchMapsAsync(false, ct, _server.Log).ConfigureAwait(false);
                     log.Add("Maps are up to date.");
                 }

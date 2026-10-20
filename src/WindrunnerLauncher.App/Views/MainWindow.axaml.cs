@@ -9,6 +9,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using WindrunnerLauncher.App.ViewModels;
 using WindrunnerLauncher.App.Views.Dialogs;
+using WindrunnerLauncher.Core.Client;
 using WindrunnerLauncher.Core.Models;
 using WindrunnerLauncher.Core.Updates;
 
@@ -22,6 +23,7 @@ public sealed partial class MainWindow : Window
     private bool _stopAndExitInProgress;
     private bool _onboardingOpen;
     private bool _launcherUpdatePromptPending;
+    private bool _hiddenForClient;
 
     public MainWindow()
     {
@@ -74,7 +76,8 @@ public sealed partial class MainWindow : Window
         _attachedViewModel = vm;
         vm.OnboardingRequested += ShowOnboarding;
         vm.CreateAccountPromptRequested += ShowCreateAccount;
-        vm.ClientLaunched += Hide;
+        vm.ClientLaunched += HideForClient;
+        vm.ClientExited += RestoreAfterClientExit;
         vm.ErrorRequested += ShowError;
         vm.RealmEditorRequested += ShowRealmEditor;
         vm.ServerUpdateRequested += ShowServerUpdate;
@@ -89,7 +92,8 @@ public sealed partial class MainWindow : Window
             return;
         vm.OnboardingRequested -= ShowOnboarding;
         vm.CreateAccountPromptRequested -= ShowCreateAccount;
-        vm.ClientLaunched -= Hide;
+        vm.ClientLaunched -= HideForClient;
+        vm.ClientExited -= RestoreAfterClientExit;
         vm.ErrorRequested -= ShowError;
         vm.RealmEditorRequested -= ShowRealmEditor;
         vm.ServerUpdateRequested -= ShowServerUpdate;
@@ -227,6 +231,28 @@ public sealed partial class MainWindow : Window
 
     private void OpenFromTray(object? sender, EventArgs e)
     {
+        _hiddenForClient = false;
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    private void HideForClient()
+    {
+        _hiddenForClient = true;
+        Hide();
+    }
+
+    /// <summary>
+    /// Brings the launcher back when the game exits, but only if it was the launch that hid it;
+    /// a user who reopened it from the tray during the session is left alone.
+    /// </summary>
+    private void RestoreAfterClientExit()
+    {
+        if (!_hiddenForClient || _exitRequested)
+            return;
+
+        _hiddenForClient = false;
         Show();
         WindowState = WindowState.Normal;
         Activate();
@@ -320,10 +346,15 @@ public sealed partial class MainWindow : Window
 
     private async void ShowRealmEditor(RealmEntry? existing)
     {
-        if (ViewModel is null)
+        if (ViewModel is not { } vm)
             return;
 
-        var edit = new RealmEditViewModel(existing);
+        // The local realm falls back to what the bundled server listens on; remote realms use the
+        // vanilla default unless an override is enabled.
+        var defaultPort = existing?.Id == RealmEntry.LocalServerId
+            ? vm.Runtime.State.Settings.Server.AuthPort
+            : RealmlistWriter.DefaultAuthPort;
+        var edit = new RealmEditViewModel(existing, defaultPort);
         var dialog = new RealmEditDialog { DataContext = edit };
         edit.Saved += realm =>
         {

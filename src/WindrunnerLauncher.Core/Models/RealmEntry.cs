@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace WindrunnerLauncher.Core.Models;
 
 public sealed class RealmEntry
@@ -8,6 +10,13 @@ public sealed class RealmEntry
     public string DisplayName { get; set; } = "";
     public string Address { get; set; } = "127.0.0.1";
     public int AuthPort { get; set; } = 3724;
+
+    /// <summary>
+    /// When set, <see cref="AuthPort"/> is the port written to the client and is no longer synced
+    /// with the local server's listening port.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AuthPortOverride { get; set; }
     public string? InGameRealmName { get; set; }
     public string? ClientDirectoryOverride { get; set; }
     public string ClientExecutable { get; set; } = "WoW.exe";
