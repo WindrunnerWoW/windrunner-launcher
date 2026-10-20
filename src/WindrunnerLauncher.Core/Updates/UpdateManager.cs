@@ -25,7 +25,8 @@ public sealed class UpdateCheckResult
 ///
 /// Only required client integrity blocks Play. A newer server release never does — the user may
 /// stay on an old server version indefinitely, or suppress a release with
-/// <see cref="IgnoreServerVersion"/>.
+/// <see cref="IgnoreServerVersion"/>. A launcher update can likewise be suppressed with
+/// <see cref="IgnoreLauncherVersion"/>.
 /// </summary>
 public sealed class UpdateManager
 {
@@ -346,9 +347,21 @@ public sealed class UpdateManager
         }
 
         LatestLauncher = manifest;
-        LauncherUpdateAvailable = manifest is not null
-                                  && manifest.HasDownloadForCurrentOs()
-                                  && IsNewer(manifest.Version, CurrentLauncherVersion);
+        LauncherUpdateAvailable = ComputeLauncherUpdateAvailable();
+    }
+
+    /// <summary>
+    /// True when the announced build is newer than the running one, has a download for this OS, and
+    /// was not ignored in settings. A newer build than the ignored one reports available again.
+    /// </summary>
+    private bool ComputeLauncherUpdateAvailable()
+    {
+        var manifest = LatestLauncher;
+        if (manifest is null || !manifest.HasDownloadForCurrentOs())
+            return false;
+        if (string.Equals(manifest.Version, _state.Settings.IgnoredLauncherVersion, StringComparison.OrdinalIgnoreCase))
+            return false;
+        return IsNewer(manifest.Version, CurrentLauncherVersion);
     }
 
     /// <summary>
@@ -498,6 +511,33 @@ public sealed class UpdateManager
         _state.Settings.IgnoredServerRelease = null;
         _state.SaveSettings();
         ServerUpdateAvailable = ComputeServerUpdateAvailable();
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Hides the launcher update until a build newer than <paramref name="version"/> is published,
+    /// and turns the matching settings toggle on.
+    /// </summary>
+    public void IgnoreLauncherVersion(string? version = null)
+    {
+        var ignored = version ?? LatestLauncher?.Version;
+        if (string.IsNullOrWhiteSpace(ignored))
+            return;
+
+        _state.Settings.IgnoredLauncherVersion = ignored;
+        _state.SaveSettings();
+        LauncherUpdateAvailable = ComputeLauncherUpdateAvailable();
+        Changed?.Invoke();
+    }
+
+    public void ClearIgnoredLauncherVersion()
+    {
+        if (string.IsNullOrWhiteSpace(_state.Settings.IgnoredLauncherVersion))
+            return;
+
+        _state.Settings.IgnoredLauncherVersion = null;
+        _state.SaveSettings();
+        LauncherUpdateAvailable = ComputeLauncherUpdateAvailable();
         Changed?.Invoke();
     }
 
@@ -833,6 +873,12 @@ public sealed class UpdateManager
 
         var previous = _selfUpdate.Stage(staged);
         try { File.Delete(staged); } catch { }
+
+        if (string.Equals(_state.Settings.IgnoredLauncherVersion, manifest.Version, StringComparison.OrdinalIgnoreCase))
+        {
+            _state.Settings.IgnoredLauncherVersion = null;
+            _state.SaveSettings();
+        }
 
         LauncherUpdateAvailable = false;
         Changed?.Invoke();

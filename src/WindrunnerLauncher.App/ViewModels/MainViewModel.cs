@@ -18,6 +18,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Whether the first-run create-account decision has been made this session.</summary>
     private bool _accountPromptResolved;
 
+    /// <summary>Set once the startup check has run, so the launcher prompt waits for its result.</summary>
+    private bool _startupCheckCompleted;
+
+    /// <summary>The launcher update modal is shown at most once per run.</summary>
+    private bool _launcherUpdatePromptShown;
+
     public MainViewModel(LauncherRuntime runtime)
     {
         _runtime = runtime;
@@ -48,6 +54,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public event Action<RealmEntry?>? RealmEditorRequested;
     public event Action? ServerUpdateRequested;
     public event Action? ServerRollbackRequested;
+
+    /// <summary>Asks the window to show the launcher update modal (startup check only).</summary>
+    public event Action? LauncherUpdateRequested;
+
+    /// <summary>Raised after a launcher update is staged and the process should relaunch.</summary>
+    public event Action? LauncherRestartRequested;
 
     internal LauncherRuntime Runtime => _runtime;
     public LocalizedStrings Texts { get; }
@@ -202,6 +214,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void SkipServerUpdate() => _runtime.Updates.IgnoreServerVersion();
+
+    public bool LauncherUpdateAvailable => _runtime.Updates.LauncherUpdateAvailable;
+    public string? LatestLauncherVersion => _runtime.Updates.LatestLauncher?.Version;
+    public string LauncherUpdateNotes => _runtime.Updates.LatestLauncher?.Notes?.Trim() ?? "";
+    public string LauncherUpdateVersions => Texts.Format(
+        "launcher.update.versions",
+        $"v{_runtime.Updates.CurrentLauncherVersion}",
+        $"v{LatestLauncherVersion ?? Texts["server.update.unknown"]}");
+
+    [RelayCommand]
+    private void IgnoreLauncherUpdate() => _runtime.Updates.IgnoreLauncherVersion();
+
+    /// <summary>Downloads and stages the announced build, then asks the window to relaunch.</summary>
+    public async Task InstallLauncherUpdateAsync()
+    {
+        if (await RunGuardedAsync(() => _runtime.Updates.UpdateLauncherAsync()))
+            LauncherRestartRequested?.Invoke();
+    }
+
+    internal void RequestLauncherRestart() => LauncherRestartRequested?.Invoke();
 
     public void RequestServerRollback()
     {
@@ -450,6 +482,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Status,
             download is { Status: DownloadStatus.Running or DownloadStatus.RetryWait });
         MaybePromptForAccount();
+        if (_startupCheckCompleted)
+            MaybePromptForLauncherUpdate();
 
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(ShowBranding));
@@ -520,7 +554,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // Update checks are best-effort; GitHub being unreachable must not block the UI.
         }
 
-        Dispatcher.UIThread.Post(Refresh);
+        Dispatcher.UIThread.Post(() =>
+        {
+            _startupCheckCompleted = true;
+            Refresh();
+        });
+    }
+
+    /// <summary>
+    /// The startup check is the only source of the launcher update modal: it shows once per run and
+    /// comes back on the next restart unless the version was ignored in settings.
+    /// </summary>
+    private void MaybePromptForLauncherUpdate()
+    {
+        if (_launcherUpdatePromptShown || _disposed || IsBusy)
+            return;
+        if (!_runtime.Updates.LauncherUpdateAvailable || _runtime.Updates.LatestLauncher is null)
+            return;
+        if (LauncherUpdateRequested is not { } handler)
+            return;
+
+        _launcherUpdatePromptShown = true;
+        handler();
     }
 
     /// <summary>

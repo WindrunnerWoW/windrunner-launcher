@@ -143,30 +143,63 @@ public class UpdateManagerTests
         Assert.DoesNotContain(result.Problems, p => p.Contains("unsigned", StringComparison.OrdinalIgnoreCase));
     }
 
+    private static void SaveSignedLauncherManifest(LauncherPaths paths, string version)
+    {
+        var payload = $$"""{"schema":1,"version":"{{version}}","exeUrl":"https://example.invalid/launcher.exe","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":12,"linuxUrl":"https://example.invalid/launcher","linuxSha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","linuxSize":12}""";
+        var message = Encoding.UTF8.GetBytes(payload);
+        var signature = Ed25519Signer.Sign(Convert.FromBase64String(DevSigningKeys.LauncherPrivateB64), message);
+        JsonStore.Save(Path.Combine(paths.ManifestCache, UpdateManager.LauncherEnvelopeFileName), new SignedManifestEnvelope
+        {
+            KeyId = "launcher-dev-1",
+            Algorithm = "Ed25519",
+            SignatureB64 = Convert.ToBase64String(signature),
+            PayloadJson = payload
+        });
+    }
+
     [Fact]
     public async Task CheckAsync_AcceptsSignedLauncherEnvelope()
     {
         using var tmp = new TempDir();
         var paths = tmp.Paths();
         paths.EnsureLayout();
-
-        var payload = """{"schema":1,"version":"99.0.0","exeUrl":"https://example.invalid/launcher.exe","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":12,"linuxUrl":"https://example.invalid/launcher","linuxSha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","linuxSize":12}""";
-        var message = Encoding.UTF8.GetBytes(payload);
-        var signature = Ed25519Signer.Sign(Convert.FromBase64String(DevSigningKeys.LauncherPrivateB64), message);
-        var envelope = new SignedManifestEnvelope
-        {
-            KeyId = "launcher-dev-1",
-            Algorithm = "Ed25519",
-            SignatureB64 = Convert.ToBase64String(signature),
-            PayloadJson = payload
-        };
-        JsonStore.Save(Path.Combine(paths.ManifestCache, UpdateManager.LauncherEnvelopeFileName), envelope);
+        SaveSignedLauncherManifest(paths, "99.0.0");
 
         using var runtime = new LauncherRuntime(paths, releases: OfflineReleases());
         await runtime.Updates.CheckAsync();
 
         Assert.True(runtime.Updates.LauncherUpdateAvailable);
         Assert.Equal("99.0.0", runtime.Updates.LatestLauncher?.Version);
+    }
+
+    [Fact]
+    public async Task IgnoreLauncherVersion_HidesUpdate_UntilCleared()
+    {
+        using var tmp = new TempDir();
+        var paths = tmp.Paths();
+        paths.EnsureLayout();
+        SaveSignedLauncherManifest(paths, "99.0.0");
+
+        using var runtime = new LauncherRuntime(paths, releases: OfflineReleases());
+        await runtime.Updates.CheckAsync();
+        Assert.True(runtime.Updates.LauncherUpdateAvailable);
+
+        runtime.Updates.IgnoreLauncherVersion();
+        Assert.Equal("99.0.0", runtime.State.Settings.IgnoredLauncherVersion);
+        Assert.False(runtime.Updates.LauncherUpdateAvailable);
+        Assert.Equal("99.0.0", new StateStore(paths).Settings.IgnoredLauncherVersion);
+
+        await runtime.Updates.CheckAsync();
+        Assert.False(runtime.Updates.LauncherUpdateAvailable);
+
+        // A build newer than the ignored one announces itself again.
+        SaveSignedLauncherManifest(paths, "99.0.1");
+        await runtime.Updates.CheckAsync();
+        Assert.True(runtime.Updates.LauncherUpdateAvailable);
+
+        runtime.Updates.ClearIgnoredLauncherVersion();
+        Assert.Null(runtime.State.Settings.IgnoredLauncherVersion);
+        Assert.True(runtime.Updates.LauncherUpdateAvailable);
     }
 
     [Fact]
