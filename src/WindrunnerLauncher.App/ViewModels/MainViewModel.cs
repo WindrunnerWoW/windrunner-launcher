@@ -45,6 +45,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _ = RefreshNewsInBackgroundAsync();
         // The server patches are needed to connect, so they are checked even with update checks off.
         _ = CheckClientPatchesAsync(runtime.State.SelectedRealm(), fetch: true);
+        if (runtime.State.Settings.CheckUpdatesOnStartup)
+            _ = CheckHearthstoneAsync();
     }
 
     public event Action? OnboardingRequested;
@@ -591,6 +593,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch
         {
             // Offline or rate-limited; Play keeps working with the patches already installed.
+        }
+
+        Dispatcher.UIThread.Post(Refresh);
+    }
+
+    /// <summary>Looks for newer Hearthstone art on GitHub, only when this client has it installed.</summary>
+    private async Task CheckHearthstoneAsync()
+    {
+        var clientDir = _runtime.Mods.ClientDirFor(_runtime.State.SelectedRealm());
+        if (_runtime.Hearthstone.Installed(clientDir) is null)
+            return;
+        try
+        {
+            await _runtime.Hearthstone.CheckAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Offline or rate-limited; the installed art keeps working.
         }
 
         Dispatcher.UIThread.Post(Refresh);

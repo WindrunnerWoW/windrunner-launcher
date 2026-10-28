@@ -14,6 +14,8 @@ Download a release, put the executable in a folder, and run it. On **Windows** i
 
 **Client and mods.** The launcher can download a clean 1.12 client, keep it up to date, and manage optional mods and VanillaTweaks. Same for addons.
 
+**Hearthstone card art.** Mods > Hearthstone Card Art sets up the textures of the Hearthstone module in the client's `Interface\Hearthstone` folder. Blizzard's card art may not be redistributed, so the launcher rebuilds it on your PC: it downloads the renders from HearthstoneJSON (cached, at most about 4.5 requests per second), applies the module's card fixes and cuts the portraits with the same image operations as the module's Python pipeline (byte for byte), and writes BLP textures. The module's own art comes from its repository (`HearthstoneRepository` / `HearthstoneBranch` in `config/settings.json`; a private repository needs a GitHub sign-in that can read it). The first run takes a few minutes and about 250 MB.
+
 **Local server (optional).** If you want a private world, the launcher can install and start MariaDB, login (`realmd`), and world (`mangosd`) for you, stop them cleanly, and roll back a bad server update from an automatic backup.
 
 **Updates.** Client content comes from Windrunner’s signed website manifest. Server packages and launcher self-updates come from GitHub Releases. Downloads are checksum-verified; you can cancel and retry.

@@ -21,7 +21,7 @@
       </Grid>
 
       <Grid Grid.Row="1" ColumnDefinitions="1.55*,1*" ColumnSpacing="14">
-        <Grid RowDefinitions="*,*" RowSpacing="14">
+        <Grid RowDefinitions="*,*,*" RowSpacing="14">
           <controls:ParchmentPanel>
             <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
               <TextBlock Text="CLIENT" Classes="eyebrow" />
@@ -46,6 +46,27 @@
                 <TextBlock Text="{Binding Addons.SummaryText}" Classes="muted" FontSize="12" VerticalAlignment="Center" />
                 <controls:LauncherButton Grid.Column="1" Content="Manage" Classes="accent"
                                          Command="{Binding OpenAddonsCommand}" Padding="16,7" />
+              </Grid>
+            </Grid>
+          </controls:ParchmentPanel>
+
+          <controls:ParchmentPanel Grid.Row="2">
+            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+              <TextBlock Text="WINDRUNNER" Classes="eyebrow" />
+              <TextBlock Grid.Row="1" Text="Hearthstone Card Art" Classes="subheading" />
+              <StackPanel Grid.Row="2" Spacing="6" VerticalAlignment="Top">
+                <TextBlock Text="Builds the card textures from HearthstoneJSON on this PC and installs them with the module's art into Interface\Hearthstone."
+                           Classes="muted" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding HearthstoneIdle}" />
+                <TextBlock Text="{Binding HearthstoneProgressText}" Classes="muted" FontSize="11"
+                           TextTrimming="CharacterEllipsis" IsVisible="{Binding HearthstoneBusy}" />
+                <ProgressBar Value="{Binding HearthstoneProgress}" Minimum="0" Maximum="1" Height="6"
+                             IsIndeterminate="{Binding HearthstoneIndeterminate}" IsVisible="{Binding HearthstoneBusy}" />
+              </StackPanel>
+              <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding HearthstoneSummaryText}" Classes="muted" FontSize="12" VerticalAlignment="Center" />
+                <controls:LauncherButton Grid.Column="1" Content="{Binding HearthstoneActionLabel}" Classes="accent"
+                                         Command="{Binding InstallHearthstoneCommand}" IsEnabled="{Binding CanInstallHearthstone}"
+                                         Padding="16,7" />
               </Grid>
             </Grid>
           </controls:ParchmentPanel>

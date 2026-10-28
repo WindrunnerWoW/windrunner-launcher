@@ -1,5 +1,6 @@
 using WindrunnerLauncher.Core.Client;
 using WindrunnerLauncher.Core.Downloads;
+using WindrunnerLauncher.Core.Hearthstone;
 using WindrunnerLauncher.Core.Localization;
 using WindrunnerLauncher.Core.Models;
 using WindrunnerLauncher.Core.Mods;
@@ -32,6 +33,7 @@ public sealed class LauncherRuntime : IDisposable
     public ServerBackupService Backups { get; }
     public GitHubAuthService GitHub { get; }
     public LinuxRunner Runner { get; }
+    public HearthstoneAssets Hearthstone { get; }
 
     public DownloadProgress? LastDownload { get; private set; }
     public event Action? Changed;
@@ -75,6 +77,8 @@ public sealed class LauncherRuntime : IDisposable
         News = new NewsFeedService();
         Runner = new LinuxRunner(Paths, Downloads);
         Play = new PlayPipeline(Paths, State, Client, Mods, Server, Realms, Runner);
+        Hearthstone = new HearthstoneAssets(Paths, State);
+        Hearthstone.Changed += () => Changed?.Invoke();
         Server.StateChanged += () => Changed?.Invoke();
         News.Changed += () => Changed?.Invoke();
         Mods.Changed += () => Changed?.Invoke();

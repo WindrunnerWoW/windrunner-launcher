@@ -52,6 +52,12 @@ public sealed class LauncherSettings
     /// </summary>
     public string? WineRunnerPath { get; set; }
 
+    /// <summary>GitHub "owner/repo" of the Hearthstone module the card art is built from (Mods > Hearthstone Card Art).</summary>
+    public string HearthstoneRepository { get; set; } = Hearthstone.HearthstoneModuleSource.DefaultRepository;
+
+    /// <summary>Branch of <see cref="HearthstoneRepository"/> the card art follows.</summary>
+    public string HearthstoneBranch { get; set; } = Hearthstone.HearthstoneModuleSource.DefaultBranch;
+
     public ServerFriendlySettings Server { get; set; } = new();
     public VanillaTweaksSettings VanillaTweaks { get; set; } = new();
 }
