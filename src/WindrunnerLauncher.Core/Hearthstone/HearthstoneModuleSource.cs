@@ -43,7 +43,7 @@ public sealed class ModuleSnapshot
 /// </summary>
 public sealed class HearthstoneModuleSource
 {
-    public const string DefaultRepository = "WrkX/windrunner-hearthstone";
+    public const string DefaultRepository = "WindrunnerWoW/windrunner-hearthstone";
     public const string DefaultBranch = "main";
 
     private readonly HttpClient _http;
