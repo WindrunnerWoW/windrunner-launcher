@@ -64,6 +64,8 @@ public sealed partial class ModsViewModel : RuntimeViewModel
         {
             if (!ClientExists)
                 return "Set up a client first";
+            if (_hearthstoneError is not null)
+                return "Last attempt failed: " + _hearthstoneError;
             var record = Hearthstone.Installed(ClientDir);
             if (record is null)
                 return "Not installed";
@@ -74,16 +76,25 @@ public sealed partial class ModsViewModel : RuntimeViewModel
         }
     }
 
+    private string? _hearthstoneError;
+
     /// <summary>Downloads and builds the card art, then replaces the client's Interface\Hearthstone.</summary>
     [RelayCommand]
-    private async Task InstallHearthstoneAsync()
+    private Task InstallHearthstoneAsync() => RunHearthstoneInstallAsync(interactive: true);
+
+    /// <summary>
+    /// An install the user started reports problems in a dialog; an automatic one (after a setup or update) only
+    /// in the panel, so a player is not interrupted when GitHub or HearthstoneJSON cannot be reached.
+    /// </summary>
+    private async Task RunHearthstoneInstallAsync(bool interactive)
     {
         if (!CanInstallHearthstone)
             return;
+        _hearthstoneError = null;
         try
         {
             var record = await Hearthstone.InstallAsync(ClientDir);
-            if (record.Warnings.Count > 0)
+            if (interactive && record.Warnings.Count > 0)
                 Main.RequestError("Hearthstone art installed with gaps",
                     $"{record.Textures} textures were installed. Skipped or fell back:\n" + string.Join("\n", record.Warnings.Take(20))
                     + (record.Warnings.Count > 20 ? $"\n… and {record.Warnings.Count - 20} more" : ""));
@@ -93,12 +104,40 @@ public sealed partial class ModsViewModel : RuntimeViewModel
         }
         catch (Exception ex)
         {
-            Main.RequestError("Hearthstone art could not be installed", ex.Message);
+            _hearthstoneError = ex.Message;
+            if (interactive)
+                Main.RequestError("Hearthstone art could not be installed", ex.Message);
         }
         finally
         {
             RefreshHearthstone();
         }
+    }
+
+    /// <summary>
+    /// After the launcher installed or updated the game or the server: installs the Hearthstone art when this client
+    /// has none, or updates it when the module changed. Quiet when GitHub cannot be reached.
+    /// </summary>
+    internal async Task EnsureHearthstoneAsync()
+    {
+        if (!CanInstallHearthstone)
+            return;
+        if (Hearthstone.Installed(ClientDir) is not null)
+        {
+            try
+            {
+                await Hearthstone.CheckAsync();
+            }
+            catch
+            {
+                return;   // offline or rate-limited; the installed art keeps working
+            }
+
+            if (Hearthstone.StateFor(ClientDir) != HearthstoneAssetState.UpdateAvailable)
+                return;
+        }
+
+        await RunHearthstoneInstallAsync(interactive: false);
     }
 
     private void RefreshHearthstone()

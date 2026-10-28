@@ -243,18 +243,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ServerRollbackRequested?.Invoke();
     }
 
-    public Task UpdateServerConfirmedAsync() => RunGuardedAsync(async () =>
+    public async Task UpdateServerConfirmedAsync()
     {
-        Server.BeginSetupProgress(ServerUpdateStages.Update, "server.update.complete");
-        try
+        var updated = await RunGuardedAsync(async () =>
         {
-            await _runtime.Updates.UpdateServerAsync(Server.SetupProgress);
-        }
-        finally
-        {
-            Server.EndSetupProgress();
-        }
-    });
+            Server.BeginSetupProgress(ServerUpdateStages.Update, "server.update.complete");
+            try
+            {
+                await _runtime.Updates.UpdateServerAsync(Server.SetupProgress);
+            }
+            finally
+            {
+                Server.EndSetupProgress();
+            }
+        });
+        if (updated)
+            _ = Mods.EnsureHearthstoneAsync();
+    }
 
     public Task RollbackServerConfirmedAsync() => RunGuardedAsync(async () =>
     {
@@ -327,7 +332,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        await RunGuardedAsync(async () =>
+        var completed = await RunGuardedAsync(async () =>
         {
             switch (action)
             {
@@ -358,6 +363,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     break;
             }
         });
+        // A fresh server or an updated client: bring the Hearthstone art along.
+        if (completed && action is PlayActionKind.InstallServer or PlayActionKind.Update)
+            _ = Mods.EnsureHearthstoneAsync();
     }
 
     [RelayCommand]
@@ -401,6 +409,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _runtime.Notify();
         // The startup check saw no client yet; re-check now that one exists.
         _ = CheckClientPatchesAsync(_runtime.State.SelectedRealm(), fetch: true);
+        _ = Mods.EnsureHearthstoneAsync();
     }
 
     /// <summary>

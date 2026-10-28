@@ -63,7 +63,8 @@
                              IsIndeterminate="{Binding HearthstoneIndeterminate}" IsVisible="{Binding HearthstoneBusy}" />
               </StackPanel>
               <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
-                <TextBlock Text="{Binding HearthstoneSummaryText}" Classes="muted" FontSize="12" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding HearthstoneSummaryText}" Classes="muted" FontSize="12" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding HearthstoneSummaryText}" />
                 <controls:LauncherButton Grid.Column="1" Content="{Binding HearthstoneActionLabel}" Classes="accent"
                                          Command="{Binding InstallHearthstoneCommand}" IsEnabled="{Binding CanInstallHearthstone}"
                                          Padding="16,7" />
