@@ -37,7 +37,9 @@ public sealed class ServerManager : IDisposable
     private readonly SetupOrchestrator _setup;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _stdinGate = new();
+    private readonly object _startCtsGate = new();
 
+    private CancellationTokenSource? _startCts;
     private OwnedProcess? _realmd;
     private OwnedProcess? _mangosd;
     private ServerLifecycleState _stateValue;
@@ -102,6 +104,12 @@ public sealed class ServerManager : IDisposable
     public async Task StartAsync(CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
+        // Lets StopAsync/ForceStopAsync interrupt the start instead of queueing behind the gate.
+        using var startCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        lock (_startCtsGate)
+            _startCts = startCts;
+        var callerCt = ct;
+        ct = startCts.Token;
         try
         {
             ThrowIfDisposed();
@@ -149,6 +157,7 @@ public sealed class ServerManager : IDisposable
                 // previous runs for diagnostics, so it must not be consulted as a readiness
                 // source for a new start.
                 var readiness = new ReadinessSession();
+                _mangosdHaltedAt = null;
                 _mangosd = StartDaemon(mangosd, MangosLog, line =>
                 {
                     readiness.Observe(line);
@@ -180,15 +189,33 @@ public sealed class ServerManager : IDisposable
             }
             catch (Exception ex)
             {
-                var cancel = CancellationToken.None;
-                await FailStartAsync(mysqlWasReady, ex, cancel).ConfigureAwait(false);
+                var stopRequested = startCts.IsCancellationRequested && !callerCt.IsCancellationRequested;
+                await FailStartAsync(mysqlWasReady, ex, stopRequested).ConfigureAwait(false);
+                // A user stop is not a failure; callers treat cancellation as quiet.
+                if (stopRequested && ex is not OperationCanceledException)
+                    throw new OperationCanceledException("Server start was cancelled by a stop request.", ex, startCts.Token);
                 throw;
             }
         }
         finally
         {
+            lock (_startCtsGate)
+                _startCts = null;
             _gate.Release();
         }
+    }
+
+    /// <summary>Cancels a start in progress so a stop does not wait out the readiness timeout.</summary>
+    private void CancelStart()
+    {
+        CancellationTokenSource? cts;
+        lock (_startCtsGate)
+            cts = _startCts;
+        if (cts is null)
+            return;
+        // CancelAsync runs the start's continuations off this thread (often the UI thread).
+        try { _ = cts.CancelAsync(); }
+        catch (ObjectDisposedException) { /* the start already finished */ }
     }
 
     /// <summary>
@@ -200,6 +227,7 @@ public sealed class ServerManager : IDisposable
     /// <inheritdoc cref="StopAsync(CancellationToken)"/>
     public async Task StopAsync(bool force = false, CancellationToken ct = default)
     {
+        CancelStart();
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -214,6 +242,7 @@ public sealed class ServerManager : IDisposable
     /// <summary>Kills mangosd and realmd, then stops MariaDB. UI confirmation is the caller's job.</summary>
     public async Task ForceStopAsync(CancellationToken ct = default)
     {
+        CancelStart();
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -498,25 +527,7 @@ public sealed class ServerManager : IDisposable
             _mangosdHaltedAt = null;
             TrySend("saveall");
             TrySend("server shutdown 0");
-            // mangosd's console thread blocks reading stdin and never returns during
-            // shutdown unless it sees EOF; the queued commands are still read first.
-            lock (_stdinGate)
-                _mangosd?.CloseStdin();
-
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
-            while (DateTime.UtcNow < deadline && MangosdAlive)
-            {
-                ct.ThrowIfCancellationRequested();
-                // "Halting process..." is logged after the world is saved and the DB closed;
-                // anything left afterwards is a stuck thread, so finish it off.
-                if (_mangosdHaltedAt is { } halted && DateTime.UtcNow - halted > HaltGrace)
-                {
-                    _mangosd?.Kill();
-                    await ProcessHost.WaitGoneAsync(_mangosd?.Id ?? 0, TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
-                    break;
-                }
-                await Task.Delay(250, ct).ConfigureAwait(false);
-            }
+            await CloseStdinAndWaitMangosdAsync(ct).ConfigureAwait(false);
 
             if (MangosdAlive && !force)
                 return;
@@ -539,24 +550,66 @@ public sealed class ServerManager : IDisposable
         SetState(IsInstalled ? ServerLifecycleState.Stopped : ServerLifecycleState.NotInstalled, "");
     }
 
-    private async Task FailStartAsync(bool mysqlWasReady, Exception ex, CancellationToken ct)
+    /// <summary>
+    /// Closes mangosd stdin and waits up to 60 seconds for it to exit. EOF ends the console
+    /// thread when running and the AutoUpdater's "press Enter" prompt after a failed migration.
+    /// </summary>
+    private async Task CloseStdinAndWaitMangosdAsync(CancellationToken ct)
+    {
+        // mangosd's console thread blocks reading stdin and never returns during
+        // shutdown unless it sees EOF; the queued commands are still read first.
+        lock (_stdinGate)
+            _mangosd?.CloseStdin();
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+        while (DateTime.UtcNow < deadline && MangosdAlive)
+        {
+            ct.ThrowIfCancellationRequested();
+            // "Halting process..." is logged after the world is saved and the DB closed;
+            // anything left afterwards is a stuck thread, so finish it off.
+            if (_mangosdHaltedAt is { } halted && DateTime.UtcNow - halted > HaltGrace)
+            {
+                _mangosd?.Kill();
+                await ProcessHost.WaitGoneAsync(_mangosd?.Id ?? 0, TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
+                break;
+            }
+            await Task.Delay(250, ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task FailStartAsync(bool mysqlWasReady, Exception ex, bool stopRequested)
     {
         _stopping = true;
-        try { _mangosd?.Kill(); } catch { }
+        if (stopRequested)
+            SetState(ServerLifecycleState.Stopping, SavingStatusMessage);
+        // mangosd may be mid-migration; let it exit on stdin EOF before resorting to a kill.
+        if (MangosdAlive)
+        {
+            try { await CloseStdinAndWaitMangosdAsync(CancellationToken.None).ConfigureAwait(false); }
+            catch { }
+        }
+        if (MangosdAlive)
+        {
+            try { _mangosd?.Kill(); } catch { }
+        }
         try { _realmd?.Kill(); } catch { }
         ReleaseDaemon(ref _mangosd);
         ReleaseDaemon(ref _realmd);
         PidFiles.Remove(_paths.ServerData, "mangosd");
         PidFiles.Remove(_paths.ServerData, "realmd");
-        if (!mysqlWasReady)
+        // A user stop always stops the database, same as StopCoreAsync.
+        if (stopRequested || !mysqlWasReady)
         {
-            try { await _maria.StopAsync(ct).ConfigureAwait(false); }
+            try { await _maria.StopAsync(CancellationToken.None).ConfigureAwait(false); }
             catch { }
         }
 
         _startedByLauncher = false;
         _stopping = false;
-        SetState(ServerLifecycleState.Error, ex.Message);
+        if (stopRequested)
+            SetState(IsInstalled ? ServerLifecycleState.Stopped : ServerLifecycleState.NotInstalled, "");
+        else
+            SetState(ServerLifecycleState.Error, ex.Message);
     }
 
     private OwnedProcess StartDaemon(string exe, ConsoleCapture capture, Action<string>? onLine = null)

@@ -216,7 +216,7 @@ public sealed partial class MainWindow : Window
         if (_exitRequested)
             return;
 
-        if (ViewModel?.IsServerRunning == true)
+        if (ViewModel is { } running && NeedsServerStop(running))
         {
             // Closing the launcher is the one thing that stops the local realm.
             e.Cancel = true;
@@ -264,7 +264,7 @@ public sealed partial class MainWindow : Window
             return;
         _stopAndExitInProgress = true;
 
-        if (ViewModel is { } vm && vm.IsServerRunning)
+        if (ViewModel is { } vm && NeedsServerStop(vm))
         {
             Hide();
             // Graceful saveall + shutdown, force-killed after 60s so exit never hangs.
@@ -277,6 +277,10 @@ public sealed partial class MainWindow : Window
         Close();
         (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
     }
+
+    // A failed start (state Error) can leave MariaDB up; it still needs a graceful SHUTDOWN.
+    private static bool NeedsServerStop(MainViewModel vm) =>
+        vm.IsServerRunning || vm.Runtime.MariaDb.StartedHere;
 
     private void HeaderPointerPressed(object? sender, PointerPressedEventArgs e)
     {

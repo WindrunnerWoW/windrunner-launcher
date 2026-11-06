@@ -482,17 +482,24 @@ public sealed class MariaDbManager : IDisposable
     {
         if (_disposed)
             return;
-        _disposed = true;
         try
         {
             var daemon = FindDaemonPath();
             if (daemon is not null && OwnsRunningServer(daemon))
-                KillOwned(daemon);
+            {
+                // Last resort on exit: try SQL SHUTDOWN first; off the UI context so it cannot deadlock.
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                try { Task.Run(() => StopAsync(cts.Token)).Wait(TimeSpan.FromSeconds(20)); }
+                catch { }
+                if (OwnsRunningServer(daemon))
+                    KillOwned(daemon);
+            }
         }
         catch
         {
         }
 
+        _disposed = true;
         ReleaseProcess();
         _downloads?.Dispose();
     }
