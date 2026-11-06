@@ -25,11 +25,16 @@ public sealed class ClientPatchUpdate
 /// <see cref="ApplyAsync"/>, which the Play button offers as "Update". Patches follow the per-realm
 /// MPQ choices: a patch the realm has disabled is never reported or updated, so realms that share a
 /// client directory with a different server are left alone.
+///
+/// On the pre-release (PTR) server channel the <c>Client-ptr</c> release is read too: its MPQs
+/// replace the same-named ones from <c>Client</c> (such as <c>patch-W.mpq</c>), so the client
+/// matches the PTR server. Without a <c>Client-ptr</c> release the regular patches stay in use.
 /// </summary>
 public sealed class ClientPatchUpdater
 {
     public const string Repository = "WindrunnerWoW/windrunner-wow";
     public const string ReleaseTag = "Client";
+    public const string PtrReleaseTag = "Client-ptr";
 
     private static readonly HttpClient SharedHttp = new(new HttpClientHandler { AllowAutoRedirect = true })
     {
@@ -40,20 +45,25 @@ public sealed class ClientPatchUpdater
     private readonly ClientManager _client;
     private readonly DownloadManager _downloads;
     private readonly GitHubReleases _releases;
+    private readonly Func<bool> _usePtrChannel;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private GitHubRelease? _release;
+    private bool _releaseIsPtr;
     private string? _plannedClientDir;
     private IReadOnlyList<ClientPatchUpdate> _pending = [];
 
     public event Action? Changed;
 
-    public ClientPatchUpdater(LauncherPaths paths, ClientManager client, DownloadManager downloads, GitHubReleases? releases = null)
+    /// <param name="usePtrChannel">True while the server runs on the pre-release (PTR) channel.</param>
+    public ClientPatchUpdater(LauncherPaths paths, ClientManager client, DownloadManager downloads,
+        GitHubReleases? releases = null, Func<bool>? usePtrChannel = null)
     {
         _paths = paths;
         _client = client;
         _downloads = downloads;
         _releases = releases ?? new GitHubReleases(SharedHttp);
+        _usePtrChannel = usePtrChannel ?? (() => false);
     }
 
     /// <summary>Outdated or missing patches the realm wants. Empty until a check covered the realm's client.</summary>
@@ -67,16 +77,20 @@ public sealed class ClientPatchUpdater
 
     /// <summary>
     /// Compares the realm's client against the release. With <paramref name="fetch"/> false the
-    /// release from the previous check is reused, which is enough after a realm switch.
+    /// release from the previous check is reused, which is enough after a realm switch, unless the
+    /// release channel changed since.
     /// </summary>
     public async Task CheckAsync(RealmEntry realm, bool fetch = true, CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (fetch || _release is null)
-                _release = await _releases.TagAsync(Repository, ReleaseTag, ct).ConfigureAwait(false)
-                           ?? throw new InvalidOperationException($"Could not read the {ReleaseTag} release of {Repository}.");
+            var ptr = _usePtrChannel();
+            if (fetch || _release is null || ptr != _releaseIsPtr)
+            {
+                _release = await FetchReleaseAsync(ptr, ct).ConfigureAwait(false);
+                _releaseIsPtr = ptr;
+            }
 
             var clientDir = _client.ClientForRealm(realm);
             var release = _release;
@@ -129,6 +143,33 @@ public sealed class ClientPatchUpdater
         }
 
         return log;
+    }
+
+    private async Task<GitHubRelease> FetchReleaseAsync(bool ptr, CancellationToken ct)
+    {
+        var release = await _releases.TagAsync(Repository, ReleaseTag, ct).ConfigureAwait(false)
+                      ?? throw new InvalidOperationException($"Could not read the {ReleaseTag} release of {Repository}.");
+        if (!ptr)
+            return release;
+        var ptrRelease = await _releases.TagAsync(Repository, PtrReleaseTag, ct).ConfigureAwait(false);
+        return ptrRelease is null ? release : Overlay(release, ptrRelease);
+    }
+
+    /// <summary>
+    /// The regular release with the PTR assets on top: a PTR asset replaces the regular one of the
+    /// same name, and PTR-only assets are added.
+    /// </summary>
+    public static GitHubRelease Overlay(GitHubRelease release, GitHubRelease ptr)
+    {
+        var ptrNames = ptr.Assets.Select(a => a.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return new GitHubRelease
+        {
+            TagName = ptr.TagName,
+            Name = ptr.Name,
+            Body = ptr.Body,
+            Prerelease = ptr.Prerelease,
+            Assets = release.Assets.Where(a => !ptrNames.Contains(a.Name)).Concat(ptr.Assets).ToList()
+        };
     }
 
     /// <summary>Lists release assets whose local copy in <paramref name="clientDir"/> is missing or different.</summary>

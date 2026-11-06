@@ -50,6 +50,91 @@ public class RealmManagerTests
     }
 
     [Fact]
+    public void Add_SplitsExplicitPortOutOfAddress()
+    {
+        var (tmp, _, realms) = Create();
+        using var _ = tmp;
+
+        var added = realms.Add(new RealmEntry { DisplayName = "Porty", Address = "logon.example.org:3308" });
+
+        Assert.Equal("logon.example.org", added.Address);
+        Assert.Equal(3308, added.AuthPort);
+        Assert.True(added.AuthPortOverride);
+    }
+
+    [Fact]
+    public void AuthPortOverride_IsPersisted()
+    {
+        var (tmp, _, realms) = Create();
+        using var _ = tmp;
+
+        var added = realms.Add(new RealmEntry
+        {
+            DisplayName = "Remote",
+            Address = "logon.example.org",
+            AuthPort = 4001,
+            AuthPortOverride = true
+        });
+
+        var reloaded = new StateStore(tmp.Paths());
+        var stored = reloaded.Realms.Realms.Single(r => r.Id == added.Id);
+        Assert.Equal("logon.example.org", stored.Address);
+        Assert.Equal(4001, stored.AuthPort);
+        Assert.True(stored.AuthPortOverride);
+    }
+
+    [Fact]
+    public void LocalAuthPortOverride_IsNotPushedToServerSettings()
+    {
+        var (tmp, state, realms) = Create();
+        using var _ = tmp;
+
+        realms.Update(new RealmEntry
+        {
+            Id = RealmEntry.LocalServerId,
+            Address = "127.0.0.1",
+            AuthPort = 4000,
+            AuthPortOverride = true
+        });
+
+        Assert.Equal(4000, realms.Local.AuthPort);
+        Assert.Equal(3724, state.Settings.Server.AuthPort);
+    }
+
+    [Fact]
+    public void LocalAuthPortOverride_IsNotOverwrittenByServerSync()
+    {
+        var (tmp, state, realms) = Create();
+        using var _ = tmp;
+
+        realms.Update(new RealmEntry
+        {
+            Id = RealmEntry.LocalServerId,
+            Address = "127.0.0.1",
+            AuthPort = 4000,
+            AuthPortOverride = true
+        });
+
+        state.Settings.Server.AuthPort = 3725;
+        realms.SyncLocalFromServerSettings();
+
+        Assert.Equal(4000, realms.Local.AuthPort);
+    }
+
+    [Fact]
+    public void LocalWithoutOverride_FollowsServerAuthPort()
+    {
+        var (tmp, state, realms) = Create();
+        using var _ = tmp;
+
+        state.Settings.Server.AuthPort = 3725;
+        realms.SyncLocalFromServerSettings();
+
+        Assert.Equal(3725, realms.Local.AuthPort);
+        Assert.False(realms.Local.AuthPortOverride);
+    }
+
+    [Fact]
     public void Add_WithLocalId_GetsFreshId()
     {
         var (tmp, _, realms) = Create();

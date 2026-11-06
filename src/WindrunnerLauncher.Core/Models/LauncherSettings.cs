@@ -7,7 +7,10 @@ public sealed class LauncherSettings
     public string Language { get; set; } = "en";
     public bool ShowBranding { get; set; } = true;
 
-    /// <summary>Hide the launcher to the system tray after starting the game client.</summary>
+    /// <summary>
+    /// Hide the launcher to the system tray after starting the game client, and bring it back
+    /// when that client exits.
+    /// </summary>
     public bool MinimizeToTrayWhenClientStarts { get; set; }
 
     /// <summary>Remove the client's WDB cache before every game launch.</summary>
@@ -19,6 +22,15 @@ public sealed class LauncherSettings
     public string? HomeBackgroundPath { get; set; }
     public string LastSelectedRealmId { get; set; } = RealmEntry.LocalServerId;
     public bool CheckUpdatesOnStartup { get; set; } = true;
+
+    /// <summary>Shows advanced update options, such as the pre-release server channel on the Server tab.</summary>
+    public bool AdvancedUpdateOptions { get; set; }
+
+    /// <summary>
+    /// Offer GitHub pre-releases (PTR builds) of the server, not only published releases. Only
+    /// honoured while <see cref="AdvancedUpdateOptions"/> is on.
+    /// </summary>
+    public bool ServerPrereleaseChannel { get; set; }
     public bool OnboardingCompleted { get; set; }
 
     /// <summary>
@@ -51,6 +63,12 @@ public sealed class LauncherSettings
     /// A Proton script is launched through umu-run when that is installed.
     /// </summary>
     public string? WineRunnerPath { get; set; }
+
+    /// <summary>GitHub "owner/repo" of the Hearthstone module the card art is built from (Mods > Hearthstone Card Art).</summary>
+    public string HearthstoneRepository { get; set; } = Hearthstone.HearthstoneModuleSource.DefaultRepository;
+
+    /// <summary>Branch of <see cref="HearthstoneRepository"/> the card art follows.</summary>
+    public string HearthstoneBranch { get; set; } = Hearthstone.HearthstoneModuleSource.DefaultBranch;
 
     public ServerFriendlySettings Server { get; set; } = new();
     public VanillaTweaksSettings VanillaTweaks { get; set; } = new();

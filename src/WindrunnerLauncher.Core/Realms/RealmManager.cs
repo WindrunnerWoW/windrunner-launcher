@@ -1,3 +1,4 @@
+using WindrunnerLauncher.Core.Client;
 using WindrunnerLauncher.Core.Models;
 using WindrunnerLauncher.Core.Persistence;
 
@@ -73,6 +74,7 @@ public sealed class RealmManager
         existing.DisplayName = IsLocal(existing) ? existing.DisplayName : realm.DisplayName;
         existing.Address = realm.Address;
         existing.AuthPort = realm.AuthPort;
+        existing.AuthPortOverride = realm.AuthPortOverride;
         existing.InGameRealmName = realm.InGameRealmName;
         existing.ClientDirectoryOverride = realm.ClientDirectoryOverride;
         existing.ClientExecutable = realm.ClientExecutable;
@@ -130,8 +132,8 @@ public sealed class RealmManager
     }
 
     /// <summary>
-    /// The configured server address is the single source of truth: whenever server settings are
-    /// saved, the Local Server realm follows them.
+    /// Server settings are the single source of truth for the Local Server realm, except for a
+    /// client-side auth port override, which belongs to the realm alone.
     /// </summary>
     public void SyncLocalFromServerSettings()
     {
@@ -148,7 +150,7 @@ public sealed class RealmManager
             changed = true;
         }
 
-        if (local.AuthPort != server.AuthPort)
+        if (!local.AuthPortOverride && local.AuthPort != server.AuthPort)
         {
             local.AuthPort = server.AuthPort;
             changed = true;
@@ -178,7 +180,8 @@ public sealed class RealmManager
             changed = true;
         }
 
-        if (server.AuthPort != local.AuthPort)
+        // A client-side port override belongs to the realm only; it must not change what realmd listens on.
+        if (!local.AuthPortOverride && server.AuthPort != local.AuthPort)
         {
             server.AuthPort = local.AuthPort;
             changed = true;
@@ -197,11 +200,17 @@ public sealed class RealmManager
 
     private static void Normalize(RealmEntry realm)
     {
-        realm.Address = (realm.Address ?? "").Trim();
-        if (realm.Address.Length == 0)
-            realm.Address = "127.0.0.1";
+        // Addresses entered as "host:port" (server settings, older state files) keep the port in
+        // AuthPort so the two can never disagree.
+        var (host, port) = RealmlistWriter.SplitHostAndPort(realm.Address);
+        realm.Address = host.Length == 0 ? "127.0.0.1" : host;
+        if (port is { } explicitPort)
+        {
+            realm.AuthPort = explicitPort;
+            realm.AuthPortOverride = true;
+        }
         if (realm.AuthPort is <= 0 or > 65535)
-            realm.AuthPort = 3724;
+            realm.AuthPort = RealmlistWriter.DefaultAuthPort;
         realm.DisplayName = (realm.DisplayName ?? "").Trim();
         if (string.IsNullOrWhiteSpace(realm.ClientExecutable))
             realm.ClientExecutable = "WoW.exe";

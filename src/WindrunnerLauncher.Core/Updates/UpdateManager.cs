@@ -234,12 +234,14 @@ public sealed class UpdateManager
     /// The highest-versioned published release that actually carries a server build. The same
     /// repository also hosts non-server releases (the rolling <c>Client</c> patch release), and
     /// "latest" follows publish order, so it cannot be trusted on its own. Numeric hotfix tags
-    /// such as <c>1.18.3-1</c> are included even when GitHub marks them as prereleases.
+    /// such as <c>1.18.3-1</c> are included even when GitHub marks them as prereleases; every
+    /// other prerelease only on the pre-release channel (<see cref="UsesServerPrereleaseChannel"/>).
     /// </summary>
     private async Task<GitHubRelease?> FindLatestServerReleaseAsync(string repo, CancellationToken ct)
     {
+        var includePrereleases = UsesServerPrereleaseChannel;
         var candidates = (await _releases.ListAsync(repo, ct: ct).ConfigureAwait(false) ?? [])
-            .Where(r => !r.Draft && (!r.Prerelease || IsNumericHotfixTag(r.TagName))
+            .Where(r => !r.Draft && (!r.Prerelease || includePrereleases || IsNumericHotfixTag(r.TagName))
                         && !string.IsNullOrWhiteSpace(r.TagName)
                         && ServerReleaseNames.Find(r) is not null)
             .ToList();
@@ -258,6 +260,10 @@ public sealed class UpdateManager
         var latest = await _releases.LatestAsync(repo, ct).ConfigureAwait(false);
         return ServerReleaseNames.Find(latest) is not null ? latest : null;
     }
+
+    /// <summary>True when server checks also consider pre-release (PTR) builds.</summary>
+    public bool UsesServerPrereleaseChannel =>
+        _state.Settings.AdvancedUpdateOptions && _state.Settings.ServerPrereleaseChannel;
 
     /// <summary>True when the newest known release is newer than the install but was skipped.</summary>
     public bool IsLatestServerReleaseSkipped
@@ -620,10 +626,13 @@ public sealed class UpdateManager
                 log.Add($"Installed server {tag}.");
 
                 // dbc/maps/vmaps/mmaps follow the signed client manifest, not the server release.
-                // Fetching is a no-op when that entry is unchanged, so this only downloads new data.
+                // Refresh that manifest first so maps published since the last update check are
+                // picked up too. Fetching is then a no-op when the maps entry is unchanged, so
+                // this only downloads data that actually changed.
                 // Maps are not part of the rollback backup, so a failure is reported instead of undone.
                 try
                 {
+                    await _mods.RefreshFromRemoteAsync(ct).ConfigureAwait(false);
                     await _server.Fetch.FetchMapsAsync(false, ct, _server.Log).ConfigureAwait(false);
                     log.Add("Maps are up to date.");
                 }
@@ -950,8 +959,7 @@ public sealed class UpdateManager
             if (baseComparison != 0)
                 return baseComparison > 0;
 
-            return TryGetHotfixRevision(candidate, out var leftHotfix)
-                   && leftHotfix > GetHotfixRevision(current);
+            return SuffixRank(candidate).CompareTo(SuffixRank(current)) > 0;
         }
 
         return !string.Equals(candidate.Trim(), current.Trim(), StringComparison.OrdinalIgnoreCase);
@@ -987,8 +995,32 @@ public sealed class UpdateManager
             System.Globalization.CultureInfo.InvariantCulture, out revision) && revision > 0;
     }
 
-    private static int GetHotfixRevision(string text) =>
-        TryGetHotfixRevision(text, out var revision) ? revision : 0;
+    /// <summary>
+    /// Orders tags that share a base version: a pre-release such as <c>1.19.0-ptr.2</c> comes
+    /// before the release <c>1.19.0</c>, which comes before its hotfix <c>1.19.0-1</c>.
+    /// Pre-releases order by their trailing number. Build metadata after <c>+</c> is ignored.
+    /// </summary>
+    private static (int Stage, int Number) SuffixRank(string text)
+    {
+        if (TryGetHotfixRevision(text, out var revision))
+            return (2, revision);
+
+        var cleaned = text.Trim().TrimStart('v', 'V');
+        var plus = cleaned.IndexOf('+');
+        if (plus >= 0)
+            cleaned = cleaned[..plus];
+        var dash = cleaned.IndexOf('-');
+        if (dash <= 0 || dash == cleaned.Length - 1 || !Version.TryParse(cleaned[..dash], out _))
+            return (1, 0);
+
+        var suffix = cleaned[(dash + 1)..];
+        var digits = suffix.Length;
+        while (digits > 0 && char.IsAsciiDigit(suffix[digits - 1]))
+            digits--;
+        var number = int.TryParse(suffix[digits..], System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : 0;
+        return (0, number);
+    }
 
     private static T? TryRead<T>(string path, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo)
         where T : class

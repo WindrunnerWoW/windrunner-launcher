@@ -13,6 +13,8 @@
   <ItemGroup>
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+    <!-- Image decoding for the Hearthstone art builder; the same version Avalonia.Skia ships. -->
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\**\*" />

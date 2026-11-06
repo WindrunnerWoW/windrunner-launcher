@@ -139,6 +139,80 @@ public class ClientPatchUpdaterTests
         Assert.Empty(updater.PendingFor(on));
     }
 
+    [Fact]
+    public void Overlay_PtrAssetsReplaceSameNamedOnesAndAddNewOnes()
+    {
+        var merged = ClientPatchUpdater.Overlay(
+            Release(("patch-W.mpq", "live"), ("patch-A.mpq", "a")),
+            Release(("PATCH-W.MPQ", "ptr"), ("patch-P.mpq", "p")));
+
+        Assert.Equal(["patch-A.mpq", "PATCH-W.MPQ", "patch-P.mpq"], merged.Assets.Select(a => a.Name));
+        Assert.Equal(Checksums.Sha256Hex(Encoding.UTF8.GetBytes("ptr")), merged.Assets[1].Sha256);
+    }
+
+    [Fact]
+    public async Task Check_UsesClientPtrOnlyOnThePtrChannel_AndFallsBackWithoutIt()
+    {
+        using var tmp = new TempDir();
+        var paths = tmp.Paths();
+        paths.EnsureLayout();
+        tmp.File("client/WoW.exe", "exe");
+        tmp.File("client/Data/patch-W.mpq", "live");
+        var state = new StateStore(paths);
+        state.Settings.ClientPath = paths.Client;
+        var client = new ClientManager(paths, state);
+
+        static string Json(string tag, string content) => JsonSerializer.Serialize(new
+        {
+            tag_name = tag,
+            assets = new[]
+            {
+                new
+                {
+                    name = "patch-W.mpq",
+                    browser_download_url = "https://example.invalid/patch-W.mpq",
+                    size = content.Length,
+                    digest = "sha256:" + Checksums.Sha256Hex(Encoding.UTF8.GetBytes(content))
+                }
+            }
+        });
+
+        var releases = new Dictionary<string, string>
+        {
+            ["Client"] = Json("Client", "live"),
+            ["Client-ptr"] = Json("Client-ptr", "ptr")
+        };
+        var ptr = false;
+        using var api = new HttpClient(new RoutingStubHandler(releases));
+        using var downloads = new DownloadManager();
+        var updater = new ClientPatchUpdater(paths, client, downloads, new GitHubReleases(api), () => ptr);
+        var realm = new RealmEntry();
+
+        await updater.CheckAsync(realm);
+        Assert.Empty(updater.PendingFor(realm));
+
+        // Switching the channel re-reads the releases even without an explicit fetch.
+        ptr = true;
+        await updater.CheckAsync(realm, fetch: false);
+        Assert.Equal(Checksums.Sha256Hex(Encoding.UTF8.GetBytes("ptr")),
+            Assert.Single(updater.PendingFor(realm)).Asset.Sha256);
+
+        releases.Remove("Client-ptr");
+        await updater.CheckAsync(realm);
+        Assert.Empty(updater.PendingFor(realm));
+    }
+
+    private sealed class RoutingStubHandler(Dictionary<string, string> releasesByTag) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var tag = request.RequestUri!.Segments[^1];
+            return Task.FromResult(releasesByTag.TryGetValue(tag, out var json)
+                ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") }
+                : new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
     private sealed class StubHandler(string json) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>

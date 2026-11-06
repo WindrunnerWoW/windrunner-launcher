@@ -25,7 +25,7 @@
 
       <Border Grid.Row="1" Classes="realm-dialog-rule" />
 
-      <Grid Grid.Row="2" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14">
+      <Grid Grid.Row="2" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="14">
         <StackPanel Spacing="6">
           <TextBlock Text="DISPLAY NAME" Classes="realm-field-label" />
           <TextBox Classes="realm-field" Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
@@ -37,11 +37,23 @@
                    Watermark="logon.example.org" />
         </StackPanel>
         <StackPanel Grid.Row="2" Spacing="6">
+          <CheckBox Content="Advanced" IsChecked="{Binding Advanced}" />
+          <TextBlock Text="{Binding DefaultPortHint}" Classes="realm-dialog-subtitle"
+                     IsVisible="{Binding !Advanced}" TextWrapping="Wrap" />
+          <StackPanel Spacing="6" IsVisible="{Binding Advanced}">
+            <TextBlock Text="CLIENT PORT" Classes="realm-field-label" />
+            <NumericUpDown Value="{Binding AuthPort}" Minimum="1" Maximum="65535" Increment="1"
+                           FormatString="0" ParsingNumberStyle="Integer" />
+            <TextBlock Text="Port written to the client realmlist. Only differs from the auth server port when it is forwarded or proxied."
+                       Classes="realm-dialog-subtitle" TextWrapping="Wrap" />
+          </StackPanel>
+        </StackPanel>
+        <StackPanel Grid.Row="3" Spacing="6">
           <TextBlock Text="CLIENT DIRECTORY OVERRIDE (OPTIONAL)" Classes="realm-field-label" />
           <TextBox Classes="realm-field" Text="{Binding ClientDirectory}"
                    Watermark="Use the default managed client" />
         </StackPanel>
-        <Border Grid.Row="3" Classes="realm-option-card">
+        <Border Grid.Row="4" Classes="realm-option-card">
           <CheckBox Content="Clear WDB cache before launch" IsChecked="{Binding ClearWdb}" />
         </Border>
       </Grid>

@@ -13,6 +13,21 @@ public static class RealmlistWriter
     /// <summary>Locales that always get a realmlist.wtf when their Data folder exists.</summary>
     public static readonly IReadOnlyList<string> KnownLocales = ["enUS", "enGB", "deDE", "frFR"];
 
+    /// <summary>
+    /// Splits an explicit <c>host:port</c> suffix off an address. Anything that is not a single
+    /// trailing <c>:port</c> (IPv6 literals, malformed ports) is returned unchanged with no port.
+    /// </summary>
+    public static (string Host, int? Port) SplitHostAndPort(string? address)
+    {
+        var text = (address ?? "").Trim();
+        var lastColon = text.LastIndexOf(':');
+        if (lastColon <= 0 || lastColon == text.Length - 1 || text.IndexOf(':') != lastColon)
+            return (text, null);
+        if (!int.TryParse(text[(lastColon + 1)..], out var port) || port is <= 0 or > 65535)
+            return (text, null);
+        return (text[..lastColon].Trim(), port);
+    }
+
     /// <summary>Vanilla realmlist entries omit the port when it is the default 3724.</summary>
     public static string FormatHost(string address, int authPort)
     {

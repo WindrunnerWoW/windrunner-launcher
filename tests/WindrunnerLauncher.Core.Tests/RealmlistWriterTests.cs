@@ -18,6 +18,22 @@ public class RealmlistWriterTests
         Assert.Equal(expected, RealmlistWriter.FormatHost(address, port));
     }
 
+    [Theory]
+    [InlineData("127.0.0.1", "127.0.0.1", null)]
+    [InlineData("  logon.example.org  ", "logon.example.org", null)]
+    [InlineData("logon.example.org:3725", "logon.example.org", 3725)]
+    [InlineData("logon.example.org:3308", "logon.example.org", 3308)]
+    [InlineData("host:", "host:", null)]
+    [InlineData("host:0", "host:0", null)]
+    [InlineData("host:70000", "host:70000", null)]
+    [InlineData("host:abc", "host:abc", null)]
+    [InlineData("::1", "::1", null)]
+    [InlineData("", "", null)]
+    public void SplitHostAndPort(string address, string expectedHost, int? expectedPort)
+    {
+        Assert.Equal((expectedHost, expectedPort), RealmlistWriter.SplitHostAndPort(address));
+    }
+
     [Fact]
     public void Write_RootRealmlist_IsQuotedSetRealmlistLine()
     {
