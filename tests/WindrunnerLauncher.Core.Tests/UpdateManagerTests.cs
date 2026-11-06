@@ -31,6 +31,13 @@ public class UpdateManagerTests
     [InlineData("1.0.0", "", true)]
     [InlineData("nightly-b", "nightly-a", true)]
     [InlineData("nightly-a", "nightly-a", false)]
+    [InlineData("1.19.0-ptr.2", "1.19.0-ptr.1", true)]
+    [InlineData("1.19.0-ptr.1", "1.19.0-ptr.2", false)]
+    [InlineData("1.19.0", "1.19.0-ptr.3", true)]
+    [InlineData("1.19.0-ptr.3", "1.19.0", false)]
+    [InlineData("1.19.0-1", "1.19.0", true)]
+    [InlineData("1.19.0", "1.19.0-1", false)]
+    [InlineData("1.19.0-ptr.1", "1.18.3-2", true)]
     public void IsNewer(string candidate, string current, bool expected)
     {
         Assert.Equal(expected, UpdateManager.IsNewer(candidate, current));

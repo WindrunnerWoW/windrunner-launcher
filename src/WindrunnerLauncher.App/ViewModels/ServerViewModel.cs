@@ -113,6 +113,30 @@ public sealed partial class ServerViewModel : RuntimeViewModel
     [RelayCommand(CanExecute = nameof(CanRestoreServer))]
     private void RestoreServer() => Main.RequestServerRollback();
 
+    /// <summary>The PTR checkbox only shows once Settings → Update policy → Advanced is on.</summary>
+    public bool ShowPrereleaseOption => Main.Runtime.State.Settings.AdvancedUpdateOptions;
+
+    public bool UsePrereleaseServer
+    {
+        get => Main.Runtime.Updates.UsesServerPrereleaseChannel;
+        set
+        {
+            Main.Runtime.State.Settings.ServerPrereleaseChannel = value;
+            Main.Runtime.State.SaveSettings();
+            OnPropertyChanged();
+            RecheckServerChannel();
+        }
+    }
+
+    /// <summary>Re-reads the server releases and client patches after the release channel changed.</summary>
+    internal void RecheckServerChannel()
+    {
+        OnPropertyChanged(nameof(UsePrereleaseServer));
+        Main.RecheckClientPatches();
+        if (CheckServerUpdateCommand.CanExecute(null))
+            CheckServerUpdateCommand.Execute(null);
+    }
+
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasBackupStatus))]
@@ -426,6 +450,8 @@ public sealed partial class ServerViewModel : RuntimeViewModel
         OnPropertyChanged(nameof(RollbackHint));
         OnPropertyChanged(nameof(CheckServerUpdateLabel));
         OnPropertyChanged(nameof(LastBackupText));
+        OnPropertyChanged(nameof(ShowPrereleaseOption));
+        OnPropertyChanged(nameof(UsePrereleaseServer));
         NotifyActionCanExecuteChanged();
         OnPropertyChanged(nameof(StartStopLabel));
         RefreshLogs();

@@ -38,6 +38,40 @@ public class ServerUpdateTests
     }
 
     [Fact]
+    public async Task Check_PrereleaseChannel_OffersPtrBuilds_OnlyWithAdvancedOptions()
+    {
+        using var env = new Env();
+        env.InstallServer("1.18.3");
+        env.Releases = [Release("1.18.3"), Release("1.19.0-ptr.1", prerelease: true), Release("1.19.0-ptr.2", prerelease: true)];
+
+        env.State.Settings.ServerPrereleaseChannel = true;
+        await env.Updates.CheckServerAsync();
+        Assert.Equal("1.18.3", env.Updates.LatestServerRelease);
+        Assert.False(env.Updates.ServerUpdateAvailable);
+
+        env.State.Settings.AdvancedUpdateOptions = true;
+        await env.Updates.CheckServerAsync();
+        Assert.Equal("1.19.0-ptr.2", env.Updates.LatestServerRelease);
+        Assert.True(env.Updates.ServerUpdateAvailable);
+    }
+
+    [Fact]
+    public async Task Check_LeavingPrereleaseChannel_OffersTheFinalRelease()
+    {
+        using var env = new Env();
+        env.InstallServer("1.19.0-ptr.2");
+        env.Releases = [Release("1.18.3"), Release("1.19.0-ptr.2", prerelease: true)];
+
+        await env.Updates.CheckServerAsync();
+        Assert.False(env.Updates.ServerUpdateAvailable);
+
+        env.Releases.Add(Release("1.19.0"));
+        await env.Updates.CheckServerAsync();
+        Assert.Equal("1.19.0", env.Updates.LatestServerRelease);
+        Assert.True(env.Updates.ServerUpdateAvailable);
+    }
+
+    [Fact]
     public async Task Check_FreshInstallWithOnlyMarker_IsNotOutdated()
     {
         using var env = new Env();

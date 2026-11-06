@@ -299,6 +299,25 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         }
     }
 
+    public bool AdvancedUpdateOptions
+    {
+        get => Main.Runtime.State.Settings.AdvancedUpdateOptions;
+        set
+        {
+            var settings = Main.Runtime.State.Settings;
+            settings.AdvancedUpdateOptions = value;
+            // A hidden option must not stay in effect: turning this off leaves the PTR channel too.
+            var leftPrerelease = !value && settings.ServerPrereleaseChannel;
+            if (leftPrerelease)
+                settings.ServerPrereleaseChannel = false;
+            Save();
+            OnPropertyChanged();
+            Main.Refresh();
+            if (leftPrerelease)
+                Main.Server.RecheckServerChannel();
+        }
+    }
+
     public bool IgnoreServerVersion
     {
         get => !string.IsNullOrWhiteSpace(Main.Runtime.State.Settings.IgnoredServerRelease);
@@ -594,6 +613,7 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         OnPropertyChanged(nameof(LightMode));
         SyncBackgroundSelection();
         OnPropertyChanged(nameof(CheckUpdatesOnStartup));
+        OnPropertyChanged(nameof(AdvancedUpdateOptions));
         NotifyClientPath();
         OnPropertyChanged(nameof(IgnoreServerVersion));
         OnPropertyChanged(nameof(IgnoredVersionText));

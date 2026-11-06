@@ -46,6 +46,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _ = RefreshNewsInBackgroundAsync();
         // The server patches are needed to connect, so they are checked even with update checks off.
         _ = CheckClientPatchesAsync(runtime.State.SelectedRealm(), fetch: true);
+        if (runtime.State.Settings.CheckUpdatesOnStartup)
+            _ = CheckHearthstoneAsync();
     }
 
     public event Action? OnboardingRequested;
@@ -170,6 +172,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         LauncherReadinessKind.Ready => Texts["home.status.ready.detail"],
         LauncherReadinessKind.Installing when HasDownload && !string.IsNullOrWhiteSpace(DownloadText) => DownloadText,
         LauncherReadinessKind.Installing when Server.IsSetupInProgress => Server.SetupProgressCaption,
+        LauncherReadinessKind.Installing when _runtime.Hearthstone.IsBusy => ProgressBarCaption,
         _ => null
     };
     public bool HasLauncherStatusDetail => !string.IsNullOrWhiteSpace(LauncherStatusDetail);
@@ -184,10 +187,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         LauncherReadinessKind.Error;
     public bool LauncherStatusIsMuted => LauncherReadiness.Kind == LauncherReadinessKind.Offline;
     public bool LauncherStatusIsBusy => LauncherReadiness.IsBusy;
-    public bool HasProgressBar => HasDownload || Server.IsSetupInProgress;
-    public double ProgressBarValue => HasDownload ? DownloadProgress : Server.SetupProgressFraction;
-    public bool ProgressBarIndeterminate => HasDownload && DownloadIndeterminate;
-    public string ProgressBarCaption => HasDownload ? DownloadText : Server.SetupProgressCaption;
+    private bool HearthstoneActive => !HasDownload && !Server.IsSetupInProgress && _runtime.Hearthstone.IsBusy;
+    public bool HasProgressBar => HasDownload || Server.IsSetupInProgress || _runtime.Hearthstone.IsBusy;
+    public double ProgressBarValue => HasDownload ? DownloadProgress
+        : HearthstoneActive ? _runtime.Hearthstone.Progress?.Fraction ?? 0
+        : Server.SetupProgressFraction;
+    public bool ProgressBarIndeterminate => HasDownload
+        ? DownloadIndeterminate
+        : HearthstoneActive && _runtime.Hearthstone.Progress?.Fraction is null;
+    public string ProgressBarCaption => HasDownload ? DownloadText
+        : HearthstoneActive ? _runtime.Hearthstone.Progress?.Text ?? "Preparing Hearthstone card art…"
+        : Server.SetupProgressCaption;
 
     public bool ServerUpdateAvailable => Status.ServerUpdateAvailable;
     /// <summary>The footer hint yields to the progress bar and to any running operation.</summary>
@@ -246,18 +256,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ServerRollbackRequested?.Invoke();
     }
 
-    public Task UpdateServerConfirmedAsync() => RunGuardedAsync(async () =>
+    public async Task UpdateServerConfirmedAsync()
     {
-        Server.BeginSetupProgress(ServerUpdateStages.Update, "server.update.complete");
-        try
+        var updated = await RunGuardedAsync(async () =>
         {
-            await _runtime.Updates.UpdateServerAsync(Server.SetupProgress);
-        }
-        finally
-        {
-            Server.EndSetupProgress();
-        }
-    });
+            Server.BeginSetupProgress(ServerUpdateStages.Update, "server.update.complete");
+            try
+            {
+                await _runtime.Updates.UpdateServerAsync(Server.SetupProgress);
+            }
+            finally
+            {
+                Server.EndSetupProgress();
+            }
+        });
+        if (updated)
+            _ = Mods.EnsureHearthstoneAsync();
+    }
 
     public Task RollbackServerConfirmedAsync() => RunGuardedAsync(async () =>
     {
@@ -330,7 +345,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        await RunGuardedAsync(async () =>
+        var completed = await RunGuardedAsync(async () =>
         {
             switch (action)
             {
@@ -361,6 +376,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     break;
             }
         });
+        // A fresh server or an updated client: bring the Hearthstone art along.
+        if (completed && action is PlayActionKind.InstallServer or PlayActionKind.Update)
+            _ = Mods.EnsureHearthstoneAsync();
     }
 
     [RelayCommand]
@@ -404,6 +422,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _runtime.Notify();
         // The startup check saw no client yet; re-check now that one exists.
         _ = CheckClientPatchesAsync(_runtime.State.SelectedRealm(), fetch: true);
+        _ = Mods.EnsureHearthstoneAsync();
     }
 
     /// <summary>
@@ -485,7 +504,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         };
         LauncherReadiness = LauncherReadinessResolver.Resolve(
             Status,
-            download is { Status: DownloadStatus.Running or DownloadStatus.RetryWait });
+            download is { Status: DownloadStatus.Running or DownloadStatus.RetryWait } || _runtime.Hearthstone.IsBusy);
         MaybePromptForAccount();
         if (_startupCheckCompleted)
             MaybePromptForLauncherUpdate();
@@ -601,8 +620,29 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Dispatcher.UIThread.Post(Refresh);
     }
 
+    /// <summary>Looks for newer Hearthstone art on GitHub, only when this client has it installed.</summary>
+    private async Task CheckHearthstoneAsync()
+    {
+        var clientDir = _runtime.Mods.ClientDirFor(_runtime.State.SelectedRealm());
+        if (_runtime.Hearthstone.Installed(clientDir) is null)
+            return;
+        try
+        {
+            await _runtime.Hearthstone.CheckAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Offline or rate-limited; the installed art keeps working.
+        }
+
+        Dispatcher.UIThread.Post(Refresh);
+    }
+
     /// <summary>Fetches the feed, unless the user turned news off.</summary>
     internal void RefreshNews() => _ = RefreshNewsInBackgroundAsync();
+
+    /// <summary>The PTR channel brings its own client patches, so a channel switch re-reads them.</summary>
+    internal void RecheckClientPatches() => _ = CheckClientPatchesAsync(_runtime.State.SelectedRealm(), fetch: true);
 
     private async Task RefreshNewsInBackgroundAsync()
     {

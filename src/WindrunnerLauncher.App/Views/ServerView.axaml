@@ -207,6 +207,12 @@
 
             <controls:LauncherButton Classes="danger" Content="{Binding Texts[server.force.stop]}"
                                      IsVisible="{Binding IsRunning}" Command="{Binding ForceStopCommand}" />
+
+            <StackPanel Spacing="4" IsVisible="{Binding ShowPrereleaseOption}">
+              <CheckBox Content="{Binding Texts[server.prerelease]}" IsChecked="{Binding UsePrereleaseServer}" />
+              <TextBlock Text="{Binding Texts[server.prerelease.hint]}" Classes="muted" FontSize="11"
+                         TextWrapping="Wrap" />
+            </StackPanel>
           </StackPanel>
         </ScrollViewer>
       </Grid>

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using WindrunnerLauncher.Core.Hearthstone;
 using WindrunnerLauncher.Core.Models;
 using WindrunnerLauncher.Core.Mods;
 
@@ -38,6 +39,120 @@ public sealed partial class ModsViewModel : RuntimeViewModel
     private void OpenAddons() => AddonsRequested?.Invoke();
 
     internal void NotifyModsSummaryChanged() => OnPropertyChanged(nameof(ModsSummaryText));
+
+    private HearthstoneAssets Hearthstone => Main.Runtime.Hearthstone;
+    private string ClientDir => Main.Runtime.Mods.ClientDirFor(Main.Runtime.State.SelectedRealm());
+    private bool ClientExists => Main.Runtime.Client.IsValid(ClientDir);
+
+    public bool HearthstoneBusy => Hearthstone.IsBusy;
+    public bool HearthstoneIdle => !HearthstoneBusy;
+    public bool CanInstallHearthstone => !HearthstoneBusy && ClientExists;
+    public string HearthstoneProgressText => Hearthstone.Progress?.Text ?? "Preparing…";
+    public double HearthstoneProgress => Hearthstone.Progress?.Fraction ?? 0;
+    public bool HearthstoneIndeterminate => Hearthstone.Progress?.Fraction is null;
+
+    public string HearthstoneActionLabel => Hearthstone.StateFor(ClientDir) switch
+    {
+        HearthstoneAssetState.NotInstalled => "Install",
+        HearthstoneAssetState.UpdateAvailable => "Update",
+        _ => "Rebuild"
+    };
+
+    public string HearthstoneSummaryText
+    {
+        get
+        {
+            if (!ClientExists)
+                return "Set up a client first";
+            if (_hearthstoneError is not null)
+                return "Last attempt failed: " + _hearthstoneError;
+            var record = Hearthstone.Installed(ClientDir);
+            if (record is null)
+                return "Not installed";
+            var state = Hearthstone.StateFor(ClientDir) == HearthstoneAssetState.UpdateAvailable ? "Update available" : "Installed";
+            return record.Warnings.Count > 0
+                ? $"{state} · {record.Textures} textures · {record.Warnings.Count} skipped"
+                : $"{state} · {record.Textures} textures";
+        }
+    }
+
+    private string? _hearthstoneError;
+
+    /// <summary>Downloads and builds the card art, then replaces the client's Interface\Hearthstone.</summary>
+    [RelayCommand]
+    private Task InstallHearthstoneAsync() => RunHearthstoneInstallAsync(interactive: true);
+
+    /// <summary>
+    /// An install the user started reports problems in a dialog; an automatic one (after a setup or update) only
+    /// in the panel, so a player is not interrupted when GitHub or HearthstoneJSON cannot be reached.
+    /// </summary>
+    private async Task RunHearthstoneInstallAsync(bool interactive)
+    {
+        if (!CanInstallHearthstone)
+            return;
+        _hearthstoneError = null;
+        // Guarded like every other long operation: the shared progress bar shows it, and Play and the server
+        // start stay disabled until the art is in place.
+        await Main.RunGuardedAsync(async () =>
+        {
+            try
+            {
+                var record = await Hearthstone.InstallAsync(ClientDir);
+                if (interactive && record.Warnings.Count > 0)
+                    Main.RequestError("Hearthstone art installed with gaps",
+                        $"{record.Textures} textures were installed. Skipped or fell back:\n" + string.Join("\n", record.Warnings.Take(20))
+                        + (record.Warnings.Count > 20 ? $"\n… and {record.Warnings.Count - 20} more" : ""));
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                _hearthstoneError = ex.Message;
+                if (interactive)
+                    Main.RequestError("Hearthstone art could not be installed", ex.Message);
+            }
+        });
+        RefreshHearthstone();
+    }
+
+    /// <summary>
+    /// After the launcher installed or updated the game or the server: installs the Hearthstone art when this client
+    /// has none, or updates it when the module changed. Quiet when GitHub cannot be reached.
+    /// </summary>
+    internal async Task EnsureHearthstoneAsync()
+    {
+        if (!CanInstallHearthstone)
+            return;
+        if (Hearthstone.Installed(ClientDir) is not null)
+        {
+            try
+            {
+                await Hearthstone.CheckAsync();
+            }
+            catch
+            {
+                return;   // offline or rate-limited; the installed art keeps working
+            }
+
+            if (Hearthstone.StateFor(ClientDir) != HearthstoneAssetState.UpdateAvailable)
+                return;
+        }
+
+        await RunHearthstoneInstallAsync(interactive: false);
+    }
+
+    private void RefreshHearthstone()
+    {
+        OnPropertyChanged(nameof(HearthstoneBusy));
+        OnPropertyChanged(nameof(HearthstoneIdle));
+        OnPropertyChanged(nameof(CanInstallHearthstone));
+        OnPropertyChanged(nameof(HearthstoneProgressText));
+        OnPropertyChanged(nameof(HearthstoneProgress));
+        OnPropertyChanged(nameof(HearthstoneIndeterminate));
+        OnPropertyChanged(nameof(HearthstoneActionLabel));
+        OnPropertyChanged(nameof(HearthstoneSummaryText));
+    }
 
     /// <summary>Off by default: only custom (non-Blizzard) Data MPQs are shown until the user asks for everything.</summary>
     public bool ShowAllMpqs
@@ -129,6 +244,7 @@ public sealed partial class ModsViewModel : RuntimeViewModel
         OnPropertyChanged(nameof(DownloadIndeterminate));
         OnPropertyChanged(nameof(HasPatchUpdates));
         OnPropertyChanged(nameof(PatchUpdatesText));
+        RefreshHearthstone();
         var realm = Main.Runtime.State.SelectedRealm();
         var rows = Main.Runtime.Mods.ListItems(realm);
         Items.Clear();

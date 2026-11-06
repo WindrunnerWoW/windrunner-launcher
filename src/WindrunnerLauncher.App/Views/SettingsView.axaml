@@ -138,6 +138,12 @@
                                   IsChecked="{Binding IgnoreServerVersion}" />
                     <TextBlock Text="{Binding IgnoredVersionText}" Classes="muted" FontSize="12" />
                   </StackPanel>
+                  <StackPanel Spacing="4">
+                    <ToggleSwitch Content="{Binding Texts[settings.advanced.updates]}"
+                                  IsChecked="{Binding AdvancedUpdateOptions}" />
+                    <TextBlock Text="{Binding Texts[settings.advanced.updates.hint]}" Classes="muted" FontSize="12"
+                               TextWrapping="Wrap" />
+                  </StackPanel>
                 </StackPanel>
               </StackPanel>
             </Border>
