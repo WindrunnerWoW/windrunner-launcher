@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WindrunnerLauncher.Core.Client;
+using WindrunnerLauncher.Core.Downloads;
 using WindrunnerLauncher.Core.Models;
 
 namespace WindrunnerLauncher.App.ViewModels;
@@ -10,6 +11,8 @@ namespace WindrunnerLauncher.App.ViewModels;
 public sealed partial class OnboardingViewModel : ObservableObject
 {
     private readonly MainViewModel _main;
+    private CancellationTokenSource? _gitHubSignInCts;
+    private bool _detached;
 
     public OnboardingViewModel(MainViewModel main)
     {
@@ -24,10 +27,12 @@ public sealed partial class OnboardingViewModel : ObservableObject
         _useInstalledClient = InstalledClientPath is not null;
         _main.PropertyChanged += OnMainPropertyChanged;
         _main.Runtime.Mods.Changed += OnModsChanged;
+        _main.Runtime.GitHub.Changed += OnGitHubChanged;
     }
 
     public event Action? LocateRequested;
     public event Action? Completed;
+    public event Action<string>? GitHubBrowserOpenRequested;
 
     public LocalizedStrings Texts { get; }
     public ObservableCollection<string> Languages { get; }
@@ -137,6 +142,99 @@ public sealed partial class OnboardingViewModel : ObservableObject
     {
         _main.Runtime.Loc.Load(value);
         Texts.Refresh();
+        NotifyGitHubState();
+    }
+
+    public bool IsGitHubConfigured => _main.Runtime.GitHub.IsConfigured;
+    public bool IsGitHubNotConfigured => !IsGitHubConfigured;
+    public bool IsGitHubSignedIn => _main.Runtime.GitHub.IsSignedIn;
+    public bool IsGitHubSignedOut => !IsGitHubSignedIn;
+    public bool CanStartGitHubSignIn => IsGitHubConfigured && IsGitHubSignedOut && !GitHubSignInInProgress;
+    public string GitHubLoginText => _main.Runtime.GitHub.Login is { Length: > 0 } login
+        ? Texts.Format("onboarding.github.signedin.as", login)
+        : Texts["onboarding.github.notsignedin"];
+
+    [ObservableProperty]
+    private bool _gitHubSignInInProgress;
+
+    partial void OnGitHubSignInInProgressChanged(bool value) => NotifyGitHubState();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasGitHubDeviceCode))]
+    private string _gitHubDeviceCode = "";
+
+    public bool HasGitHubDeviceCode => GitHubDeviceCode.Length > 0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasGitHubSignInStatus))]
+    private string _gitHubSignInStatus = "";
+
+    public bool HasGitHubSignInStatus => GitHubSignInStatus.Length > 0;
+
+    [RelayCommand]
+    private async Task SignInWithGitHubAsync()
+    {
+        if (_detached || GitHubSignInInProgress)
+            return;
+
+        _gitHubSignInCts?.Cancel();
+        using var cts = new CancellationTokenSource();
+        _gitHubSignInCts = cts;
+
+        GitHubSignInInProgress = true;
+        GitHubDeviceCode = "";
+        GitHubSignInStatus = Texts["onboarding.github.requesting"];
+        try
+        {
+            var code = await _main.Runtime.GitHub.BeginSignInAsync(cts.Token);
+            GitHubDeviceCode = code.UserCode;
+            GitHubSignInStatus = Texts.Format("onboarding.github.enter", code.VerificationUri);
+            GitHubBrowserOpenRequested?.Invoke(code.VerificationUri);
+
+            var result = await _main.Runtime.GitHub.CompleteSignInAsync(code, cts.Token);
+            GitHubSignInStatus = result.Status switch
+            {
+                GitHubDevicePollStatus.Success => GitHubLoginText,
+                GitHubDevicePollStatus.Denied => Texts["onboarding.github.denied"],
+                GitHubDevicePollStatus.Expired => Texts["onboarding.github.expired"],
+                _ => result.Message ?? Texts["onboarding.github.failed"]
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            GitHubSignInStatus = Texts["onboarding.github.cancelled"];
+        }
+        catch (Exception ex)
+        {
+            GitHubSignInStatus = Texts.Format("onboarding.github.failed.detail", ex.Message);
+        }
+        finally
+        {
+            _gitHubSignInCts = null;
+            GitHubDeviceCode = "";
+            GitHubSignInInProgress = false;
+        }
+    }
+
+    [RelayCommand]
+    private void CancelGitHubSignIn() => _gitHubSignInCts?.Cancel();
+
+    [RelayCommand]
+    private void SignOutOfGitHub()
+    {
+        _main.Runtime.GitHub.SignOut();
+        GitHubSignInStatus = Texts["onboarding.github.signedout"];
+        NotifyGitHubState();
+    }
+
+    private void OnGitHubChanged() => Dispatcher.UIThread.Post(NotifyGitHubState);
+
+    private void NotifyGitHubState()
+    {
+        OnPropertyChanged(nameof(IsGitHubSignedIn));
+        OnPropertyChanged(nameof(IsGitHubSignedOut));
+        OnPropertyChanged(nameof(CanStartGitHubSignIn));
+        OnPropertyChanged(nameof(GitHubLoginText));
     }
 
     partial void OnExistingClientPathChanged(string? value) => ContinueCommand.NotifyCanExecuteChanged();
@@ -226,8 +324,11 @@ public sealed partial class OnboardingViewModel : ObservableObject
     /// <summary>Drops subscriptions to launcher-lifetime services. Call when the window closes.</summary>
     public void Detach()
     {
+        _detached = true;
+        _gitHubSignInCts?.Cancel();
         _main.PropertyChanged -= OnMainPropertyChanged;
         _main.Runtime.Mods.Changed -= OnModsChanged;
+        _main.Runtime.GitHub.Changed -= OnGitHubChanged;
     }
 
     [RelayCommand]
