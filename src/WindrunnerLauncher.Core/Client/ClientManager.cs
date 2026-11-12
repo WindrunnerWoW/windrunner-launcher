@@ -259,6 +259,11 @@ public sealed class ClientManager
         if (Mods.VanillaTweaks.EnsureCleanBackup(clientDir) is not { } backup)
             return null;
 
+        // Older manual vanilla-tweaks runs left a second patched executable behind. The managed
+        // pair is WoW.exe plus the pristine backup, so drop that leftover when it is provably a
+        // patch variant of the backup.
+        Mods.VanillaTweaks.RemoveLegacyOutputs(clientDir, backup);
+
         if (!string.Equals(_state.Settings.CleanWowExeBackupPath, backup, StringComparison.Ordinal))
         {
             _state.Settings.CleanWowExeBackupPath = backup;

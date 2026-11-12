@@ -325,6 +325,95 @@ public static class VanillaTweaks
         return backup;
     }
 
+    /// <summary>
+    /// Output name vanilla-tweaks uses when no <c>-o</c> is given. Manual runs of the tool leave
+    /// this file beside the game; the launcher never writes it and patches <c>WoW.exe</c> in place.
+    /// </summary>
+    public const string LegacyOutputFileName = "WoW_tweaked.exe";
+
+    /// <summary>
+    /// vanilla-tweaks only rewrites a handful of instruction bytes, so a leftover output has the
+    /// same size as the clean executable and differs in at most a few thousand bytes. Anything that
+    /// differs more is not a patch variant and must be left alone.
+    /// </summary>
+    private const int MaxPatchDifferenceBytes = 4096;
+
+    /// <summary>A tenth of a percent, capped so large executables stay in a realistic range.</summary>
+    private static int PatchDifferenceLimit(long length) =>
+        (int)Math.Clamp(length / 1000, 64, MaxPatchDifferenceBytes);
+
+    /// <summary>
+    /// Deletes leftover <c>WoW_tweaked.exe</c> copies that are demonstrably patch variants of the
+    /// clean backup, leaving only the managed <c>WoW.exe</c> and its pristine backup in the client.
+    /// An unrelated executable that happens to use that name is kept.
+    /// </summary>
+    public static IReadOnlyList<string> RemoveLegacyOutputs(string clientDir, string cleanBackupPath)
+    {
+        var removed = new List<string>();
+        if (!File.Exists(cleanBackupPath))
+            return removed;
+
+        var legacy = ClientPaths.Child(clientDir, LegacyOutputFileName);
+        if (!File.Exists(legacy))
+            return removed;
+
+        // Never touch the executable the launcher is about to start.
+        var live = ClientManager.FindExecutable(clientDir);
+        if (live is not null && string.Equals(
+                Path.GetFullPath(live), Path.GetFullPath(legacy), StringComparison.OrdinalIgnoreCase))
+            return removed;
+
+        if (!LooksLikePatchVariantOf(legacy, cleanBackupPath))
+            return removed;
+
+        try
+        {
+            File.Delete(legacy);
+            removed.Add(legacy);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A running client can hold the file; the next pass retries.
+        }
+
+        return removed;
+    }
+
+    private static bool LooksLikePatchVariantOf(string candidate, string cleanBackupPath)
+    {
+        try
+        {
+            using var patched = new FileStream(candidate, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var clean = new FileStream(cleanBackupPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            if (patched.Length == 0 || patched.Length != clean.Length)
+                return false;
+
+            var left = new byte[81920];
+            var right = new byte[81920];
+            var limit = PatchDifferenceLimit(patched.Length);
+            var differences = 0;
+            while (patched.Position < patched.Length)
+            {
+                var count = (int)Math.Min(left.Length, patched.Length - patched.Position);
+                patched.ReadExactly(left, 0, count);
+                clean.ReadExactly(right, 0, count);
+                for (var i = 0; i < count; i++)
+                {
+                    if (left[i] == right[i])
+                        continue;
+                    if (++differences > limit)
+                        return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Puts the clean executable back in place, undoing any executable patch.</summary>
     public static bool Revert(string clientDir, string cleanBackupPath)
     {
