@@ -121,6 +121,28 @@ public sealed class AddonManager
         return entry;
     }
 
+    /// <summary>
+    /// Deletes an installed addon's folders from the client and from its disabled store, but keeps the
+    /// catalog entry so the addon stays listed and can be reinstalled later. <see cref="Remove"/> is the
+    /// second step that drops the entry itself.
+    /// </summary>
+    public void Uninstall(AddonEntry entry, string clientDir)
+    {
+        var addOnsDir = ClientPaths.Resolve(clientDir, "Interface", "AddOns");
+        foreach (var folder in entry.FolderNames)
+            TryDeleteDir(Path.Combine(addOnsDir, folder));
+
+        // The disabled store only ever holds this entry's parked folders, including leftovers from
+        // earlier versions that FolderNames no longer lists.
+        TryDeleteDir(DisabledStore(entry.Id));
+
+        entry.Installed = false;
+        entry.Enabled = false;
+        entry.InstalledVersion = "";
+        Save();
+        Changed?.Invoke();
+    }
+
     /// <summary>Removes an entry and, when it was installed, cleans up the AddOns folder(s) it owns.</summary>
     public void Remove(string id, string? clientDir)
     {

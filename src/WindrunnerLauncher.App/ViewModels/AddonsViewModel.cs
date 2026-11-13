@@ -99,6 +99,12 @@ public sealed partial class AddonsViewModel : RuntimeViewModel, IDisposable
         return Task.CompletedTask;
     }
 
+    internal void Uninstall(AddonItemViewModel item)
+    {
+        _manager.Uninstall(item.Entry, ClientDir);
+        SyncFromManager();
+    }
+
     internal void Remove(AddonItemViewModel item)
     {
         _manager.Remove(item.Id, ClientDir);
@@ -224,6 +230,10 @@ public sealed partial class AddonItemViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ActionLabel))]
     [NotifyPropertyChangedFor(nameof(CanRunAction))]
     [NotifyPropertyChangedFor(nameof(IsUpdateAction))]
+    [NotifyPropertyChangedFor(nameof(CanUninstall))]
+    [NotifyPropertyChangedFor(nameof(CanRemoveFromList))]
+    [NotifyCanExecuteChangedFor(nameof(UninstallCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveCommand))]
     private bool _installed;
 
     [ObservableProperty]
@@ -246,6 +256,9 @@ public sealed partial class AddonItemViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ActionLabel))]
     [NotifyPropertyChangedFor(nameof(IsEnableAction))]
     [NotifyPropertyChangedFor(nameof(IsDisableAction))]
+    [NotifyPropertyChangedFor(nameof(CanUninstall))]
+    [NotifyPropertyChangedFor(nameof(CanRemoveFromList))]
+    [NotifyCanExecuteChangedFor(nameof(UninstallCommand))]
     [NotifyCanExecuteChangedFor(nameof(RemoveCommand))]
     private bool _isBusy;
 
@@ -257,6 +270,8 @@ public sealed partial class AddonItemViewModel : ObservableObject
     partial void OnErrorTextChanged(string? value) => OnPropertyChanged(nameof(HasErrorText));
 
     public bool CanToggle => Installed && !IsBusy;
+    public bool CanUninstall => Installed && !IsBusy;
+    public bool CanRemoveFromList => !Installed && !IsBusy;
     public string ToggleLabel => Enabled ? "Disable" : "Enable";
     public bool IsEnableAction => CanToggle && !Enabled;
     public bool IsDisableAction => CanToggle && Enabled;
@@ -320,8 +335,9 @@ public sealed partial class AddonItemViewModel : ObservableObject
         }
     }
 
-    private bool CanRemove => !IsBusy;
+    [RelayCommand(CanExecute = nameof(CanUninstall))]
+    private void Uninstall() => _owner.Uninstall(this);
 
-    [RelayCommand(CanExecute = nameof(CanRemove))]
+    [RelayCommand(CanExecute = nameof(CanRemoveFromList))]
     private void Remove() => _owner.Remove(this);
 }

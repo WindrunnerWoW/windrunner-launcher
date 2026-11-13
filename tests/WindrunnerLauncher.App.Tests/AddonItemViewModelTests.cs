@@ -47,6 +47,21 @@ public class AddonItemViewModelTests
     }
 
     [Fact]
+    public void InstalledAddon_OffersUninstallInsteadOfListRemoval()
+    {
+        var item = new AddonItemViewModel(null!, new AddonEntry());
+        Assert.True(item.CanRemoveFromList);
+        Assert.False(item.CanUninstall);
+
+        item.Installed = true;
+
+        Assert.False(item.CanRemoveFromList);
+        Assert.True(item.CanUninstall);
+        Assert.True(item.UninstallCommand.CanExecute(null));
+        Assert.False(item.RemoveCommand.CanExecute(null));
+    }
+
+    [Fact]
     public void WorkingAddon_CannotBeRemoved_AndNotifiesWhenAvailable()
     {
         var item = new AddonItemViewModel(null!, new AddonEntry());
