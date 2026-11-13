@@ -9,6 +9,7 @@ namespace WindrunnerLauncher.Core.Tests;
 /// A stored GitHub token that GitHub no longer accepts used to fail every API call, which the
 /// launcher reported as "GitHub unreachable". These cover the recovery path.
 /// </summary>
+[Collection(TestCollections.GitHubApi)]
 public class GitHubAuthRecoveryTests : IDisposable
 {
     private const string ReleaseJson = """

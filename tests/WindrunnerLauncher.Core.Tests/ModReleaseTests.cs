@@ -4,6 +4,7 @@ using WindrunnerLauncher.Core.Persistence;
 
 namespace WindrunnerLauncher.Core.Tests;
 
+[Collection(TestCollections.GitHubApi)]
 public class ModReleaseTests
 {
     [Fact]

@@ -5,6 +5,7 @@ using WindrunnerLauncher.Core.Models;
 
 namespace WindrunnerLauncher.Core.Tests;
 
+[Collection(TestCollections.GitHubApi)]
 public sealed class AddonManagerTests
 {
     [Fact]
