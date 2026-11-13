@@ -152,12 +152,47 @@ public class ConfigWtfTests
     }
 
     [Fact]
-    public void SetValues_CreatesFile_WithCrlfAndQuotedValues()
+    public void SetValues_CreatesFile_WithLfAndQuotedValues()
     {
         using var tmp = new TempDir();
         var path = tmp.Combine("WTF", "Config.wtf");
         ConfigWtf.SetValues(path, new Dictionary<string, string> { ["realmList"] = "127.0.0.1" });
-        Assert.Equal("SET realmList \"127.0.0.1\"\r\n", File.ReadAllText(path));
+        Assert.Equal("SET realmList \"127.0.0.1\"\n", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void SetValues_KeepsLfLineEndings()
+    {
+        using var tmp = new TempDir();
+        var path = tmp.File("WTF/Config.wtf",
+            "SET locale \"enUS\"\n" +
+            "SET realmList \"old.example.org\"\n" +
+            "SET CameraDistanceMax \"50\"\n");
+
+        ConfigWtf.SetValues(path, new Dictionary<string, string> { ["realmList"] = "new.example.org" });
+
+        Assert.Equal(
+            "SET locale \"enUS\"\n" +
+            "SET realmList \"new.example.org\"\n" +
+            "SET CameraDistanceMax \"50\"\n",
+            File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void SetValues_UnchangedValues_LeaveTheFileAlone()
+    {
+        using var tmp = new TempDir();
+        var path = tmp.File("WTF/Config.wtf", "SET realmList \"127.0.0.1\"\n");
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+        try
+        {
+            ConfigWtf.SetValues(path, new Dictionary<string, string> { ["realmList"] = "127.0.0.1" });
+            Assert.Equal("SET realmList \"127.0.0.1\"\n", File.ReadAllText(path));
+        }
+        finally
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+        }
     }
 
     [Fact]
