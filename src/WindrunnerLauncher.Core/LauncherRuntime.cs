@@ -159,6 +159,7 @@ public sealed class LauncherRuntime : IDisposable
 
     public void Dispose()
     {
+        GitHub.Dispose();
         Downloads.Dispose();
         Server.Dispose();
         MariaDb.Dispose();

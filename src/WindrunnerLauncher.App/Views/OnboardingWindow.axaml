@@ -43,6 +43,8 @@
               <StackPanel Grid.Column="1" Spacing="8" IsVisible="{Binding IsGitHubConfigured}">
                 <TextBlock Text="{Binding Texts[onboarding.github.hint]}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
                 <TextBlock Text="{Binding GitHubLoginText}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding GitHubReauthText}" Classes="warn" FontSize="12" TextWrapping="Wrap"
+                           IsVisible="{Binding NeedsGitHubReauth}" />
                 <Border Classes="realm-shell" Padding="12" IsVisible="{Binding HasGitHubDeviceCode}">
                   <StackPanel Spacing="4">
                     <TextBlock Text="{Binding Texts[onboarding.github.code]}" Classes="eyebrow" />
@@ -51,7 +53,7 @@
                 </Border>
                 <TextBlock Text="{Binding GitHubSignInStatus}" Classes="muted" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding HasGitHubSignInStatus}" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <controls:LauncherButton Classes="accent" Content="{Binding Texts[onboarding.github.signin]}"
+                  <controls:LauncherButton Classes="accent" Content="{Binding GitHubSignInButtonText}"
                                            Command="{Binding SignInWithGitHubCommand}"
                                            IsVisible="{Binding IsGitHubSignedOut}"
                                            IsEnabled="{Binding CanStartGitHubSignIn}" />
