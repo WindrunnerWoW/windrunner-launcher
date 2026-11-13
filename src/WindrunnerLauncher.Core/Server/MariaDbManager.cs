@@ -586,7 +586,7 @@ public sealed class MariaDbManager : IDisposable
                 Emit(stderr.TrimEnd());
             if (process.ExitCode != 0 && !force)
             {
-                var msg = string.IsNullOrWhiteSpace(stderr) ? $"mysql failed with exit {process.ExitCode}" : stderr.Trim();
+                var msg = string.IsNullOrWhiteSpace(stderr) ? $"mysql failed with exit {process.ExitCode}" : ClientErrorSummary(stderr);
                 throw new InvalidOperationException("mysql failed: " + msg);
             }
 
@@ -599,6 +599,21 @@ public sealed class MariaDbManager : IDisposable
                 try { File.Delete(credFile); } catch { }
             }
         }
+    }
+
+    /// <summary>
+    /// The client echoes the failing statement (framed by dashes) to stderr before the
+    /// <c>ERROR nnnn ...</c> line, so a long INSERT buries the cause. Keep only the ERROR
+    /// lines; the full stderr has already gone to the log.
+    /// </summary>
+    internal static string ClientErrorSummary(string stderr)
+    {
+        var errors = stderr
+            .Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.StartsWith("ERROR", StringComparison.Ordinal))
+            .ToList();
+        return errors.Count > 0 ? string.Join(Environment.NewLine, errors) : stderr.Trim();
     }
 
     private string WriteClientCnf(string user, string password, int port)
