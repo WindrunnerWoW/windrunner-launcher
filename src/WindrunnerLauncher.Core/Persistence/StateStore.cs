@@ -7,6 +7,7 @@ public sealed class StateStore
     private readonly LauncherPaths _paths;
     public LauncherSettings Settings { get; private set; }
     public string GitHubTokenFile => _paths.GitHubTokenFile;
+    public string GitHubRefreshTokenFile => _paths.GitHubRefreshTokenFile;
     public RealmListState Realms { get; private set; }
     public RollbackMetadata? Rollback { get; private set; }
 

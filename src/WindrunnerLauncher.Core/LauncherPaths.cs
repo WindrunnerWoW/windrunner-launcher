@@ -44,6 +44,9 @@ public sealed class LauncherPaths
     public string UmuDir => Path.Combine(Tools, "umu");
     public string GitHubTokenFile => Path.Combine(Config, "github.token");
 
+    /// <summary>Renews <see cref="GitHubTokenFile"/> without a new sign-in. Mode 0600, like the token.</summary>
+    public string GitHubRefreshTokenFile => Path.Combine(Config, "github.refresh");
+
     public LauncherPaths(string root)
     {
         Root = Path.GetFullPath(root);

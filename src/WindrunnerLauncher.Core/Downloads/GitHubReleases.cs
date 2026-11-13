@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 
@@ -25,6 +26,12 @@ public sealed class GitHubRelease
 
 public sealed record GitHubRepository(string DefaultBranch, DateTimeOffset? PushedAt);
 
+/// <summary>
+/// Why a GitHub API call returned nothing. Callers report this instead of treating every failure as
+/// "GitHub is unreachable", which is what hid an expired sign-in behind a network error.
+/// </summary>
+public sealed record GitHubApiFailure(HttpStatusCode StatusCode, string Message);
+
 public sealed class GitHubReleases
 {
     private readonly HttpClient _http;
@@ -40,25 +47,31 @@ public sealed class GitHubReleases
             _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
     }
 
-    public Task<GitHubRelease?> LatestAsync(string ownerRepo, CancellationToken ct = default) =>
+    public async Task<GitHubRelease?> LatestAsync(string ownerRepo, CancellationToken ct = default) =>
+        (await LatestWithFailureAsync(ownerRepo, ct).ConfigureAwait(false)).Release;
+
+    /// <summary>As <see cref="LatestAsync"/>, but also says why nothing came back.</summary>
+    public Task<(GitHubRelease? Release, GitHubApiFailure? Failure)> LatestWithFailureAsync(
+        string ownerRepo, CancellationToken ct = default) =>
         FetchAsync($"https://api.github.com/repos/{ownerRepo}/releases/latest", ct);
 
-    public Task<GitHubRelease?> TagAsync(string ownerRepo, string tag, CancellationToken ct = default) =>
-        FetchAsync($"https://api.github.com/repos/{ownerRepo}/releases/tags/{tag}", ct);
+    public async Task<GitHubRelease?> TagAsync(string ownerRepo, string tag, CancellationToken ct = default) =>
+        (await FetchAsync($"https://api.github.com/repos/{ownerRepo}/releases/tags/{tag}", ct).ConfigureAwait(false)).Release;
 
     /// <summary>Returns the default branch and last push time for a public GitHub repository.</summary>
     public async Task<GitHubRepository?> RepositoryAsync(string ownerRepo, CancellationToken ct = default)
     {
-        using var doc = await FetchDocumentAsync($"https://api.github.com/repos/{ownerRepo}", ct).ConfigureAwait(false);
-        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object
-            || !doc.RootElement.TryGetProperty("default_branch", out var branchElement))
+        var (doc, _) = await FetchDocumentAsync($"https://api.github.com/repos/{ownerRepo}", ct).ConfigureAwait(false);
+        using var document = doc;
+        if (document is null || document.RootElement.ValueKind != JsonValueKind.Object
+            || !document.RootElement.TryGetProperty("default_branch", out var branchElement))
             return null;
 
         var branch = branchElement.GetString();
         if (string.IsNullOrWhiteSpace(branch))
             return null;
 
-        DateTimeOffset? pushedAt = doc.RootElement.TryGetProperty("pushed_at", out var pushedElement)
+        DateTimeOffset? pushedAt = document.RootElement.TryGetProperty("pushed_at", out var pushedElement)
             && pushedElement.ValueKind == JsonValueKind.String
             && pushedElement.TryGetDateTimeOffset(out var parsedPushedAt)
                 ? parsedPushedAt
@@ -68,36 +81,104 @@ public sealed class GitHubReleases
     }
 
     /// <summary>The most recent releases, newest first. Null when the API cannot be reached.</summary>
-    public async Task<IReadOnlyList<GitHubRelease>?> ListAsync(string ownerRepo, int perPage = 30, CancellationToken ct = default)
+    public async Task<IReadOnlyList<GitHubRelease>?> ListAsync(string ownerRepo, int perPage = 30, CancellationToken ct = default) =>
+        (await ListWithFailureAsync(ownerRepo, perPage, ct).ConfigureAwait(false)).Releases;
+
+    /// <summary>As <see cref="ListAsync"/>, but also says why nothing came back.</summary>
+    public async Task<(IReadOnlyList<GitHubRelease>? Releases, GitHubApiFailure? Failure)> ListWithFailureAsync(
+        string ownerRepo, int perPage = 30, CancellationToken ct = default)
     {
-        using var doc = await FetchDocumentAsync(
+        var (doc, failure) = await FetchDocumentAsync(
             $"https://api.github.com/repos/{ownerRepo}/releases?per_page={perPage}", ct).ConfigureAwait(false);
-        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Array)
-            return null;
-        return doc.RootElement.EnumerateArray().Select(Parse).ToList();
+        using var document = doc;
+        if (document is null || document.RootElement.ValueKind != JsonValueKind.Array)
+            return (null, failure);
+        return (document.RootElement.EnumerateArray().Select(Parse).ToList(), null);
     }
 
-    private async Task<GitHubRelease?> FetchAsync(string url, CancellationToken ct)
+    private async Task<(GitHubRelease? Release, GitHubApiFailure? Failure)> FetchAsync(string url, CancellationToken ct)
     {
-        using var doc = await FetchDocumentAsync(url, ct).ConfigureAwait(false);
-        return doc is null || doc.RootElement.ValueKind != JsonValueKind.Object ? null : Parse(doc.RootElement);
+        var (doc, failure) = await FetchDocumentAsync(url, ct).ConfigureAwait(false);
+        using var document = doc;
+        return document is null || document.RootElement.ValueKind != JsonValueKind.Object
+            ? (null, failure)
+            : (Parse(document.RootElement), null);
     }
 
     /// <summary>
     /// Signed-in requests get GitHub's authenticated rate limit (5,000/hour) instead of the
     /// anonymous 60/hour-per-IP limit that unauthenticated callers share.
+    ///
+    /// A 401 means the stored token is dead. It is dropped and the request retried anonymously,
+    /// because a token GitHub no longer accepts must not fail every later request until the user
+    /// signs out by hand.
     /// </summary>
-    private async Task<JsonDocument?> FetchDocumentAsync(string url, CancellationToken ct)
+    private async Task<(JsonDocument? Document, GitHubApiFailure? Failure)> FetchDocumentAsync(
+        string url, CancellationToken ct)
+    {
+        if (GitHubSession.IsSignedIn && GitHubSession.RefreshHook is { } refresh)
+            await refresh(ct).ConfigureAwait(false);
+
+        var sentToken = GitHubSession.IsSignedIn;
+        var resp = await SendAsync(url, ct).ConfigureAwait(false);
+
+        if (resp.StatusCode == HttpStatusCode.Unauthorized && sentToken)
+        {
+            resp.Dispose();
+            // Drop the token here as well as through the hook, so the retry goes out anonymously
+            // even when no auth service is listening.
+            GitHubSession.ClearToken();
+            GitHubSession.TokenRejectedHook?.Invoke();
+            resp = await SendAsync(url, ct).ConfigureAwait(false);
+        }
+
+        using (resp)
+            return await ReadAsync(resp, ct).ConfigureAwait(false);
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(string url, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         if (GitHubSession.AccessToken is { Length: > 0 } token)
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await _http.SendAsync(request, ct).ConfigureAwait(false);
+    }
 
-        using var resp = await _http.SendAsync(request, ct).ConfigureAwait(false);
+    private static async Task<(JsonDocument? Document, GitHubApiFailure? Failure)> ReadAsync(
+        HttpResponseMessage resp, CancellationToken ct)
+    {
         if (!resp.IsSuccessStatusCode)
-            return null;
+            return (null, DescribeFailure(resp));
+
         await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        return await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+        return (await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false), null);
+    }
+
+    private static GitHubApiFailure DescribeFailure(HttpResponseMessage resp)
+    {
+        var status = resp.StatusCode;
+        var code = (int)status;
+
+        if (status == HttpStatusCode.Unauthorized)
+            return new GitHubApiFailure(status,
+                "GitHub rejected the stored sign-in (401). Sign in again to raise the API limit.");
+
+        if (status is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
+        {
+            var reset = resp.Headers.TryGetValues("X-RateLimit-Reset", out var values)
+                        && long.TryParse(values.FirstOrDefault(), out var epoch)
+                ? DateTimeOffset.FromUnixTimeSeconds(epoch).ToLocalTime()
+                : (DateTimeOffset?)null;
+            var when = reset is { } at ? $" Retry after {at:t}." : "";
+            return new GitHubApiFailure(status,
+                $"GitHub rate limit reached ({code}).{when} Signing in raises the limit from 60 to 5,000 requests per hour.");
+        }
+
+        if (status == HttpStatusCode.NotFound)
+            return new GitHubApiFailure(status,
+                "GitHub returned 404: the repository or release does not exist, or is private.");
+
+        return new GitHubApiFailure(status, $"GitHub returned {code} {resp.ReasonPhrase}.");
     }
 
     public static GitHubReleaseAsset? FindAsset(GitHubRelease release, string globContains) =>

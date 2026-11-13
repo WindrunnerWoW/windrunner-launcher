@@ -3,6 +3,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
+using System.Diagnostics;
 using WindrunnerLauncher.App.ViewModels;
 
 namespace WindrunnerLauncher.App.Views;
@@ -24,6 +25,8 @@ public sealed partial class OnboardingWindow : Window
         vm.LocateRequested += LocateClient;
         vm.Completed -= Complete;
         vm.Completed += Complete;
+        vm.GitHubBrowserOpenRequested -= OpenGitHubVerificationUrl;
+        vm.GitHubBrowserOpenRequested += OpenGitHubVerificationUrl;
     }
 
     private async void LocateClient()
@@ -41,6 +44,19 @@ public sealed partial class OnboardingWindow : Window
     }
 
     private void Complete() => Close(true);
+
+    private static void OpenGitHubVerificationUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        using var process = Process.Start(new ProcessStartInfo(uri.AbsoluteUri)
+        {
+            UseShellExecute = true
+        });
+    }
 
     private void HeaderPointerPressed(object? sender, PointerPressedEventArgs e)
     {

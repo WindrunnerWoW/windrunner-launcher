@@ -211,10 +211,12 @@ public sealed class UpdateManager
         var repo = ServerRepositoryFromEnv();
         try
         {
-            var release = await FindLatestServerReleaseAsync(repo, ct).ConfigureAwait(false);
+            var (release, failure) = await FindLatestServerReleaseAsync(repo, ct).ConfigureAwait(false);
             if (release is null)
             {
-                problems.Add($"Could not read the latest release of {repo}.");
+                problems.Add(failure is { } f
+                    ? $"Could not read the latest release of {repo}: {f.Message}"
+                    : $"Could not read the latest release of {repo}.");
                 return;
             }
 
@@ -237,10 +239,12 @@ public sealed class UpdateManager
     /// such as <c>1.18.3-1</c> are included even when GitHub marks them as prereleases; every
     /// other prerelease only on the pre-release channel (<see cref="UsesServerPrereleaseChannel"/>).
     /// </summary>
-    private async Task<GitHubRelease?> FindLatestServerReleaseAsync(string repo, CancellationToken ct)
+    private async Task<(GitHubRelease? Release, GitHubApiFailure? Failure)> FindLatestServerReleaseAsync(
+        string repo, CancellationToken ct)
     {
         var includePrereleases = UsesServerPrereleaseChannel;
-        var candidates = (await _releases.ListAsync(repo, ct: ct).ConfigureAwait(false) ?? [])
+        var (listed, listFailure) = await _releases.ListWithFailureAsync(repo, ct: ct).ConfigureAwait(false);
+        var candidates = (listed ?? [])
             .Where(r => !r.Draft && (!r.Prerelease || includePrereleases || IsNumericHotfixTag(r.TagName))
                         && !string.IsNullOrWhiteSpace(r.TagName)
                         && ServerReleaseNames.Find(r) is not null)
@@ -254,11 +258,13 @@ public sealed class UpdateManager
         }
 
         if (best is not null || candidates.Count > 0)
-            return best ?? candidates[0];
+            return (best ?? candidates[0], null);
 
         // The list endpoint failed or was empty; fall back to GitHub's notion of "latest".
-        var latest = await _releases.LatestAsync(repo, ct).ConfigureAwait(false);
-        return ServerReleaseNames.Find(latest) is not null ? latest : null;
+        var (latest, latestFailure) = await _releases.LatestWithFailureAsync(repo, ct).ConfigureAwait(false);
+        return ServerReleaseNames.Find(latest) is not null
+            ? (latest, null)
+            : (null, latestFailure ?? listFailure);
     }
 
     /// <summary>True when server checks also consider pre-release (PTR) builds.</summary>
@@ -329,7 +335,7 @@ public sealed class UpdateManager
     {
         ct.ThrowIfCancellationRequested();
 
-        await RefreshLauncherManifestFromRemoteAsync(ct).ConfigureAwait(false);
+        await RefreshLauncherManifestFromRemoteAsync(problems, ct).ConfigureAwait(false);
 
         var envelopePath = Path.Combine(_paths.ManifestCache, LauncherEnvelopeFileName);
 
@@ -377,12 +383,21 @@ public sealed class UpdateManager
     /// cached manifest (if any) in place, exactly like <see cref="ModManager.RefreshFromRemoteAsync"/>
     /// does for the client manifest.
     /// </summary>
-    private async Task RefreshLauncherManifestFromRemoteAsync(CancellationToken ct)
+    private async Task RefreshLauncherManifestFromRemoteAsync(List<string> problems, CancellationToken ct)
     {
         try
         {
-            var release = await _releases.LatestAsync(LauncherRepository, ct).ConfigureAwait(false);
-            var asset = release?.Assets.FirstOrDefault(a =>
+            var (release, failure) = await _releases.LatestWithFailureAsync(LauncherRepository, ct).ConfigureAwait(false);
+            if (release is null)
+            {
+                // A network exception stays silent (the cached manifest is still usable), but an
+                // answer from GitHub that we could not use is worth showing.
+                if (failure is { } f)
+                    problems.Add($"Launcher update check failed: {f.Message}");
+                return;
+            }
+
+            var asset = release.Assets.FirstOrDefault(a =>
                 a.Name.Equals(LauncherEnvelopeFileName, StringComparison.OrdinalIgnoreCase));
             if (asset is null)
                 return;

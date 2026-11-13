@@ -385,6 +385,7 @@ public class ArchiveTarTests
     }
 }
 
+[Collection(TestCollections.GitHubApi)]
 public class GitHubTokenFileTests
 {
     [Fact]

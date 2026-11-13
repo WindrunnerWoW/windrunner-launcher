@@ -360,8 +360,16 @@ public sealed class SqlImporter
 
     private async Task ImportFileAsync(string file, string? database, bool force, CancellationToken ct, Action<string>? log)
     {
-        log?.Invoke(" " + Path.GetFileName(file));
-        await _maria.InvokeSqlFileAsync(file, database, force, ct).ConfigureAwait(false);
+        var name = Path.GetFileName(file);
+        log?.Invoke(" " + name);
+        try
+        {
+            await _maria.InvokeSqlFileAsync(file, database, force, ct).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"{name}: {ex.Message}", ex);
+        }
     }
 
     private static List<string> ListSql(string dir)

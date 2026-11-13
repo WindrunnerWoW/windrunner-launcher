@@ -53,6 +53,19 @@ public sealed class LauncherSettings
 
     /// <summary>DPAPI-protected (current user), base64. Never the raw GitHub token. Windows only.</summary>
     public string? GitHubTokenProtected { get; set; }
+
+    /// <summary>
+    /// DPAPI-protected (current user), base64. Renews <see cref="GitHubTokenProtected"/> without a
+    /// new sign-in. Only present when the OAuth App expires user tokens.
+    /// </summary>
+    public string? GitHubRefreshTokenProtected { get; set; }
+
+    /// <summary>
+    /// When the stored access token stops working, as reported by GitHub. Null when the token does
+    /// not expire, which is the case for OAuth apps without token expiration.
+    /// </summary>
+    public DateTimeOffset? GitHubTokenExpiresAt { get; set; }
+
     public string? GitHubLogin { get; set; }
 
     /// <summary>How the Windows client is started on Linux.</summary>

@@ -46,4 +46,12 @@ public class SqlImporterTests
         await Assert.ThrowsAsync<InvalidDataException>(
             () => SqlImporter.WriteWorldSchemaAsync(source, target, CancellationToken.None));
     }
+
+    [Fact]
+    public void ClientErrorSummary_KeepsOnlyErrorLines()
+    {
+        var stderr = "--------------\nINSERT INTO `npc_trainer`\n(\n `entry`\n)\nVALUES (1)\n--------------\n\nERROR 1062 (23000) at line 2914: Duplicate entry '80106-1780' for key 'entry_spell'\n";
+        Assert.Equal("ERROR 1062 (23000) at line 2914: Duplicate entry '80106-1780' for key 'entry_spell'", MariaDbManager.ClientErrorSummary(stderr));
+        Assert.Equal("something odd", MariaDbManager.ClientErrorSummary("  something odd \n"));
+    }
 }

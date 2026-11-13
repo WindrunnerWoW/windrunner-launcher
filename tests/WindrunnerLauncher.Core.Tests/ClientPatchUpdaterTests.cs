@@ -10,6 +10,7 @@ using WindrunnerLauncher.Core.Security;
 
 namespace WindrunnerLauncher.Core.Tests;
 
+[Collection(TestCollections.GitHubApi)]
 public class ClientPatchUpdaterTests
 {
     private static GitHubRelease Release(params (string Name, string Content)[] assets) => new()

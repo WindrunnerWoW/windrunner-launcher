@@ -509,6 +509,20 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         ? $"Signed in as {login}"
         : "Not signed in";
 
+    /// <summary>GitHub dropped the stored sign-in, so the user has to approve a new one.</summary>
+    public bool NeedsGitHubReauth => Main.Runtime.GitHub.NeedsReauth;
+
+    public string GitHubReauthText => Main.Runtime.GitHub.LastSignOutReason switch
+    {
+        GitHubSignOutReason.TokenRejected =>
+            "GitHub rejected the saved sign-in, so it was removed. Sign in again to restore the 5,000 requests/hour limit.",
+        GitHubSignOutReason.TokenExpired =>
+            "The saved GitHub sign-in expired and could not be renewed. Sign in again to restore the 5,000 requests/hour limit.",
+        _ => ""
+    };
+
+    public string GitHubSignInButtonText => NeedsGitHubReauth ? "Sign in again" : "Sign in with GitHub";
+
     [ObservableProperty]
     private bool _gitHubSignInInProgress;
 
@@ -588,6 +602,9 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         OnPropertyChanged(nameof(IsGitHubSignedOut));
         OnPropertyChanged(nameof(CanStartGitHubSignIn));
         OnPropertyChanged(nameof(GitHubLoginText));
+        OnPropertyChanged(nameof(NeedsGitHubReauth));
+        OnPropertyChanged(nameof(GitHubReauthText));
+        OnPropertyChanged(nameof(GitHubSignInButtonText));
     }
 
     private void Save()

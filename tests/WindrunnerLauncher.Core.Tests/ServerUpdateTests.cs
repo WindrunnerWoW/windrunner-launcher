@@ -11,6 +11,7 @@ using WindrunnerLauncher.Core.Updates;
 
 namespace WindrunnerLauncher.Core.Tests;
 
+[Collection(TestCollections.GitHubApi)]
 public class ServerUpdateTests
 {
     [Fact]

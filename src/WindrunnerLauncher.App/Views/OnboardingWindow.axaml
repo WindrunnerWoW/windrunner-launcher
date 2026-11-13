@@ -36,13 +36,50 @@
         <StackPanel Margin="28,22" Spacing="12">
           <Border Classes="inset-metal">
             <Grid ColumnDefinitions="210,*" ColumnSpacing="18">
-              <StackPanel><TextBlock Text="01" Classes="eyebrow" /><TextBlock Text="{Binding Texts[onboarding.language]}" Classes="subheading" /></StackPanel>
+              <StackPanel>
+                <TextBlock Text="01" Classes="eyebrow" />
+                <TextBlock Text="{Binding Texts[onboarding.github]}" Classes="subheading" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Spacing="8" IsVisible="{Binding IsGitHubConfigured}">
+                <TextBlock Text="{Binding Texts[onboarding.github.hint]}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding GitHubLoginText}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding GitHubReauthText}" Classes="warn" FontSize="12" TextWrapping="Wrap"
+                           IsVisible="{Binding NeedsGitHubReauth}" />
+                <Border Classes="realm-shell" Padding="12" IsVisible="{Binding HasGitHubDeviceCode}">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Texts[onboarding.github.code]}" Classes="eyebrow" />
+                    <TextBlock Text="{Binding GitHubDeviceCode}" FontSize="24" FontWeight="Bold" LetterSpacing="2" />
+                  </StackPanel>
+                </Border>
+                <TextBlock Text="{Binding GitHubSignInStatus}" Classes="muted" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding HasGitHubSignInStatus}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <controls:LauncherButton Classes="accent" Content="{Binding GitHubSignInButtonText}"
+                                           Command="{Binding SignInWithGitHubCommand}"
+                                           IsVisible="{Binding IsGitHubSignedOut}"
+                                           IsEnabled="{Binding CanStartGitHubSignIn}" />
+                  <controls:LauncherButton Content="{Binding Texts[onboarding.github.cancel]}"
+                                           Command="{Binding CancelGitHubSignInCommand}"
+                                           IsVisible="{Binding GitHubSignInInProgress}" />
+                  <controls:LauncherButton Classes="danger" Content="{Binding Texts[onboarding.github.signout]}"
+                                           Command="{Binding SignOutOfGitHubCommand}"
+                                           IsVisible="{Binding IsGitHubSignedIn}" />
+                </StackPanel>
+                <TextBlock Text="{Binding Texts[onboarding.github.optional]}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+              </StackPanel>
+              <TextBlock Grid.Column="1" Text="{Binding Texts[onboarding.github.unconfigured]}" Classes="muted"
+                         FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center"
+                         IsVisible="{Binding IsGitHubNotConfigured}" />
+            </Grid>
+          </Border>
+          <Border Classes="inset-metal">
+            <Grid ColumnDefinitions="210,*" ColumnSpacing="18">
+              <StackPanel><TextBlock Text="02" Classes="eyebrow" /><TextBlock Text="{Binding Texts[onboarding.language]}" Classes="subheading" /></StackPanel>
               <ComboBox Grid.Column="1" Classes="realm-select" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}" VerticalAlignment="Center" />
             </Grid>
           </Border>
           <Border Classes="inset-metal">
             <Grid ColumnDefinitions="210,*" ColumnSpacing="18">
-              <StackPanel><TextBlock Text="02" Classes="eyebrow" /><TextBlock Text="{Binding Texts[onboarding.install]}" Classes="subheading" /></StackPanel>
+              <StackPanel><TextBlock Text="03" Classes="eyebrow" /><TextBlock Text="{Binding Texts[onboarding.install]}" Classes="subheading" /></StackPanel>
               <StackPanel Grid.Column="1" Spacing="8">
                 <RadioButton GroupName="InstallChoice" Content="{Binding Texts[onboarding.client.only]}" IsChecked="{Binding IsClientOnly}" />
                 <RadioButton GroupName="InstallChoice" Content="{Binding Texts[onboarding.client.server]}" IsChecked="{Binding IsClientAndServer}" />
@@ -51,7 +88,7 @@
           </Border>
           <Border Classes="inset-metal">
             <Grid ColumnDefinitions="210,*" ColumnSpacing="18">
-              <StackPanel><TextBlock Text="03" Classes="eyebrow" /><TextBlock Text="{Binding Texts[onboarding.client.source]}" Classes="subheading" /></StackPanel>
+              <StackPanel><TextBlock Text="04" Classes="eyebrow" /><TextBlock Text="{Binding Texts[onboarding.client.source]}" Classes="subheading" /></StackPanel>
               <StackPanel Grid.Column="1" Spacing="9">
                 <RadioButton GroupName="ClientSource" Content="{Binding InstalledClientLabel}" IsChecked="{Binding IsInstalledSource}" IsVisible="{Binding HasInstalledClient}" />
                 <RadioButton GroupName="ClientSource" Content="{Binding Texts[onboarding.download]}" IsChecked="{Binding IsDownloadSource}" IsEnabled="{Binding CanDownloadClient}" />

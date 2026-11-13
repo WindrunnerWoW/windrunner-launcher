@@ -146,6 +146,59 @@ public sealed class AddonManager
 
     public void Save() => JsonStore.Save(_paths.AddonsFile, _catalog);
 
+    /// <summary>
+    /// Renames installed addon folders that do not match their <c>.toc</c> file. Earlier builds
+    /// installed a download under the archive's own folder name ("AtlasLoot-main"), which the game
+    /// ignores, so those addons never loaded and could not be reinstalled from the UI either.
+    /// Returns true when a folder was renamed.
+    /// </summary>
+    public bool RepairFolderNames(string clientDir)
+    {
+        var addOnsDir = ClientPaths.Resolve(clientDir, "Interface", "AddOns");
+        if (!Directory.Exists(addOnsDir))
+            return false;
+
+        var changed = false;
+        foreach (var entry in _catalog.Addons.Where(a => a.Installed && a.FolderNames.Count > 0))
+        {
+            var disabledDir = DisabledStore(entry.Id);
+            var names = new List<string>();
+            foreach (var folder in entry.FolderNames)
+            {
+                var live = Path.Combine(addOnsDir, folder);
+                var parked = Path.Combine(disabledDir, folder);
+                var source = Directory.Exists(live) ? live : Directory.Exists(parked) ? parked : null;
+                var name = source is null ? null : AddonPayload.ResolveFolderName(source);
+                // A case-only difference is the same folder on Windows, and renaming it would
+                // delete the source through the case-insensitive file system.
+                if (source is null || name is null || string.Equals(name, folder, StringComparison.OrdinalIgnoreCase))
+                {
+                    names.Add(folder);
+                    continue;
+                }
+
+                var target = Path.Combine(Path.GetDirectoryName(source)!, name);
+                TryDeleteDir(target);
+                ModFileOps.MoveDirectory(source, target);
+                names.Add(name);
+                changed = true;
+            }
+
+            if (!names.SequenceEqual(entry.FolderNames, StringComparer.Ordinal))
+            {
+                entry.FolderNames = names;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            Save();
+            Changed?.Invoke();
+        }
+
+        return changed;
+    }
 
     /// <summary>Resolves the one downloadable archive an entry's repo + filter currently point at. Never downloads.</summary>
     public async Task<AddonReleaseCandidate> ResolveReleaseAsync(AddonEntry entry, CancellationToken ct = default)
@@ -269,13 +322,11 @@ public sealed class AddonManager
     {
         var assets = new List<GitHubReleaseAsset>();
         string version;
-        string? sourceFolderName = null;
         if (!string.IsNullOrWhiteSpace(entry.GitHubRepo))
         {
             var candidates = await ResolveReleaseAssetsAsync(entry, ct).ConfigureAwait(false);
             assets.AddRange(candidates.Assets);
             version = candidates.Tag;
-            sourceFolderName = candidates.SourceFolderName;
         }
         else
         {
@@ -343,13 +394,6 @@ public sealed class AddonManager
 
         if (folders.Count == 0)
             throw new InvalidDataException($"{Display(entry)}'s download did not contain a recognisable addon (no .toc file found).");
-
-        // GitHub source archives wrap repository-root files in a folder named
-        // "repo-branch". When the addon itself lives at that root, install it using
-        // the repository name (for example CallOfElements-master -> CallOfElements).
-        if (sourceFolderName is not null && folders.Count == 1
-            && string.Equals(Path.GetDirectoryName(folders[0].SourcePath), Path.GetFullPath(merged), StringComparison.OrdinalIgnoreCase))
-            folders[0] = folders[0] with { Name = sourceFolderName };
 
         var addOnsDir = ClientPaths.Resolve(clientDir, "Interface", "AddOns");
         Directory.CreateDirectory(addOnsDir);

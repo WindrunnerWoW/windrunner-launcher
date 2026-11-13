@@ -78,6 +78,62 @@ public sealed class VanillaTweaksTests
     }
 
     [Fact]
+    public void RemoveLegacyOutputs_DeletesPatchVariantAndKeepsManagedPair()
+    {
+        using var tmp = new TempDir();
+        var client = tmp.Dir("client");
+        var clean = WriteExecutable(Path.Combine(client, ClientManager.CleanBackupFileName), 8192);
+        var live = WriteExecutable(Path.Combine(client, "WoW.exe"), 8192);
+        var legacy = WriteExecutable(Path.Combine(client, VanillaTweaks.LegacyOutputFileName), 8192);
+        PatchByte(live, 3);
+        PatchByte(legacy, 7);
+
+        var removed = VanillaTweaks.RemoveLegacyOutputs(client, clean);
+
+        Assert.Equal([legacy], removed);
+        Assert.False(File.Exists(legacy));
+        Assert.True(File.Exists(live));
+        Assert.True(File.Exists(clean));
+    }
+
+    [Fact]
+    public void RemoveLegacyOutputs_KeepsExecutableThatIsNotAPatchVariant()
+    {
+        using var tmp = new TempDir();
+        var client = tmp.Dir("client");
+        var clean = WriteExecutable(Path.Combine(client, ClientManager.CleanBackupFileName), 8192);
+        var legacy = Path.Combine(client, VanillaTweaks.LegacyOutputFileName);
+        File.WriteAllBytes(legacy, Enumerable.Repeat((byte)0xFF, 8192).ToArray());
+
+        Assert.Empty(VanillaTweaks.RemoveLegacyOutputs(client, clean));
+        Assert.True(File.Exists(legacy));
+    }
+
+    [Fact]
+    public void RemoveLegacyOutputs_RequiresCleanBackup()
+    {
+        using var tmp = new TempDir();
+        var client = tmp.Dir("client");
+        var legacy = WriteExecutable(Path.Combine(client, VanillaTweaks.LegacyOutputFileName), 1024);
+
+        Assert.Empty(VanillaTweaks.RemoveLegacyOutputs(client, Path.Combine(client, "missing.exe")));
+        Assert.True(File.Exists(legacy));
+    }
+
+    private static string WriteExecutable(string path, int length)
+    {
+        File.WriteAllBytes(path, new byte[length]);
+        return path;
+    }
+
+    private static void PatchByte(string path, int offset)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite);
+        stream.Position = offset;
+        stream.WriteByte(0x90);
+    }
+
+    [Fact]
     public void BuildArguments_RecommendedPreset_UsesUpstreamFlagNames()
     {
         var args = VanillaTweaks.BuildArguments(new VanillaTweaksSettings(), "in.exe", "out.exe");

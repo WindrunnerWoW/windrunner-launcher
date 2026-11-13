@@ -2,6 +2,7 @@ using WindrunnerLauncher.Core.Downloads;
 
 namespace WindrunnerLauncher.Core.Tests;
 
+[Collection(TestCollections.GitHubApi)]
 public class GitHubReleasesTests
 {
     private static readonly GitHubRelease Release = new()
