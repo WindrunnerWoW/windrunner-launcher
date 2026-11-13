@@ -259,6 +259,43 @@ public sealed class AddonManagerTests
         Assert.False(reloaded.RepairFolderNames(paths.Client));
     }
 
+    [Fact]
+    public void Uninstall_DeletesFoldersButKeepsTheCatalogEntry()
+    {
+        using var tmp = new TempDir("addon-uninstall");
+        var paths = tmp.Paths();
+        paths.EnsureLayout();
+        using var http = new HttpClient(new RewriteHostHandler("http://127.0.0.1:1/"));
+        using var downloads = new DownloadManager(http);
+        var manager = new AddonManager(paths, downloads, new ReleaseCatalog(http));
+        var entry = manager.Addons.First(a => a.Id == "atlasloot-turtle");
+        var live = Directory.CreateDirectory(Path.Combine(paths.Client, "Interface", "AddOns", "AtlasLoot")).FullName;
+        File.WriteAllText(Path.Combine(live, "AtlasLoot.toc"), "## Interface: 11200\n");
+        var parked = Directory.CreateDirectory(
+            Path.Combine(paths.Mods, "addons", entry.Id, "disabled", "AtlasLoot")).FullName;
+        File.WriteAllText(Path.Combine(parked, "AtlasLoot.toc"), "## Interface: 11200\n");
+        entry.Installed = true;
+        entry.Enabled = true;
+        entry.InstalledVersion = "1.0";
+        entry.FolderNames = ["AtlasLoot"];
+        var changes = 0;
+        manager.Changed += () => changes++;
+
+        manager.Uninstall(entry, paths.Client);
+
+        Assert.False(Directory.Exists(live));
+        Assert.False(Directory.Exists(parked));
+        Assert.False(entry.Installed);
+        Assert.False(entry.Enabled);
+        Assert.Equal("", entry.InstalledVersion);
+        Assert.Equal(1, changes);
+
+        var reloaded = new AddonManager(paths, downloads, new ReleaseCatalog(http));
+        var persisted = reloaded.Addons.Single(a => a.Id == entry.Id);
+        Assert.False(persisted.Installed);
+        Assert.Equal("", persisted.InstalledVersion);
+    }
+
     private static AddonEntry SplitEntry() => new()
     {
         Id = "windrunner-voiceover-data",

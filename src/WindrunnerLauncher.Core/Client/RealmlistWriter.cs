@@ -105,7 +105,9 @@ public static class RealmlistWriter
 
 /// <summary>
 /// Minimal <c>WTF/Config.wtf</c> reader/writer. Unknown lines are preserved verbatim so user CVars
-/// survive every launcher write.
+/// survive every launcher write, and the file keeps the line endings it already uses: the 1.12
+/// client writes and parses <c>Config.wtf</c> with bare LF, so a CRLF rewrite made the client fall
+/// back to its defaults and drop every CVar it had not registered itself.
 /// </summary>
 public static class ConfigWtf
 {
@@ -125,7 +127,10 @@ public static class ConfigWtf
         return values;
     }
 
-    /// <summary>Sets or replaces <c>SET key "value"</c> lines, keeping everything else intact.</summary>
+    /// <summary>
+    /// Sets or replaces <c>SET key "value"</c> lines, keeping everything else intact. The file is
+    /// only rewritten when a value actually changes, and it keeps its existing line endings.
+    /// </summary>
     public static void SetValues(string path, IReadOnlyDictionary<string, string> values)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -133,6 +138,7 @@ public static class ConfigWtf
         var existing = File.Exists(path)
             ? File.ReadAllLines(path).ToList()
             : [];
+        var newline = DetectNewline(path);
 
         var remaining = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
         var output = new List<string>(existing.Count + remaining.Count);
@@ -155,7 +161,7 @@ public static class ConfigWtf
         foreach (var pair in remaining)
             output.Add(Format(pair.Key, pair.Value));
 
-        File.WriteAllText(path, string.Join("\r\n", output) + "\r\n", new UTF8Encoding(false));
+        WriteIfChanged(path, string.Join(newline, output) + newline);
     }
 
     public static void Remove(string path, IEnumerable<string> keys)
@@ -167,7 +173,29 @@ public static class ConfigWtf
         var kept = File.ReadAllLines(path)
             .Where(line => !(TryParse(line, out var key, out _) && drop.Contains(key)))
             .ToList();
-        File.WriteAllText(path, string.Join("\r\n", kept) + "\r\n", new UTF8Encoding(false));
+        var newline = DetectNewline(path);
+        WriteIfChanged(path, string.Join(newline, kept) + newline);
+    }
+
+    /// <summary>
+    /// Line ending the file already uses. A new file gets bare LF, which is what the client writes.
+    /// </summary>
+    private static string DetectNewline(string path)
+    {
+        if (!File.Exists(path))
+            return "\n";
+
+        var text = File.ReadAllText(path);
+        var firstBreak = text.IndexOf('\n');
+        return firstBreak > 0 && text[firstBreak - 1] == '\r' ? "\r\n" : "\n";
+    }
+
+    /// <summary>Leaves the file untouched when the content is already what it should be.</summary>
+    private static void WriteIfChanged(string path, string content)
+    {
+        if (File.Exists(path) && File.ReadAllText(path) == content)
+            return;
+        File.WriteAllText(path, content, new UTF8Encoding(false));
     }
 
     private static string Format(string key, string value) => $"SET {key} \"{value}\"";
