@@ -154,6 +154,20 @@ public sealed partial class OnboardingViewModel : ObservableObject
         ? Texts.Format("onboarding.github.signedin.as", login)
         : Texts["onboarding.github.notsignedin"];
 
+    /// <summary>GitHub dropped the stored sign-in, so the user has to approve a new one.</summary>
+    public bool NeedsGitHubReauth => _main.Runtime.GitHub.NeedsReauth;
+
+    public string GitHubReauthText => _main.Runtime.GitHub.LastSignOutReason switch
+    {
+        GitHubSignOutReason.TokenRejected => Texts["onboarding.github.reauth.rejected"],
+        GitHubSignOutReason.TokenExpired => Texts["onboarding.github.reauth.expired"],
+        _ => ""
+    };
+
+    public string GitHubSignInButtonText => NeedsGitHubReauth
+        ? Texts["onboarding.github.signin.again"]
+        : Texts["onboarding.github.signin"];
+
     [ObservableProperty]
     private bool _gitHubSignInInProgress;
 
@@ -235,6 +249,9 @@ public sealed partial class OnboardingViewModel : ObservableObject
         OnPropertyChanged(nameof(IsGitHubSignedOut));
         OnPropertyChanged(nameof(CanStartGitHubSignIn));
         OnPropertyChanged(nameof(GitHubLoginText));
+        OnPropertyChanged(nameof(NeedsGitHubReauth));
+        OnPropertyChanged(nameof(GitHubReauthText));
+        OnPropertyChanged(nameof(GitHubSignInButtonText));
     }
 
     partial void OnExistingClientPathChanged(string? value) => ContinueCommand.NotifyCanExecuteChanged();

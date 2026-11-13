@@ -177,6 +177,87 @@ public sealed class AddonManagerTests
         Assert.Equal("1.0", reloaded.Addons.Single(addon => addon.Id == entry.Id).Version);
     }
 
+    [Fact]
+    public async Task Install_SourceArchiveInstallsUnderTheTocName()
+    {
+        using var tmp = new TempDir("addon-source-archive");
+        var paths = tmp.Paths();
+        paths.EnsureLayout();
+        // GitHub wraps a source archive in "<repo>-<branch>", which is never the addon name.
+        var archive = await MakeArchiveWithFolderAsync(tmp, "AtlasLoot-main",
+            ("AtlasLoot.toc", "## Interface: 11200\n"), ("Core.lua", "-- core"));
+
+        using var server = new LoopbackHttpServer((ctx, _) =>
+        {
+            var path = ctx.Request.Url!.AbsolutePath;
+            if (path.EndsWith("/releases/latest", StringComparison.Ordinal))
+                return LoopbackHttpServer.WriteAsync(ctx, [], status: 404);
+            if (path.EndsWith("/repos/Otari98/AtlasLoot", StringComparison.Ordinal))
+            {
+                ctx.Response.ContentType = "application/json";
+                return LoopbackHttpServer.WriteAsync(ctx, Encoding.UTF8.GetBytes("""{ "default_branch": "main" }"""));
+            }
+            if (path.EndsWith("/archive/refs/heads/main.zip", StringComparison.Ordinal))
+                return LoopbackHttpServer.WriteAsync(ctx, archive);
+            return LoopbackHttpServer.WriteAsync(ctx, [], status: 404);
+        });
+
+        using var http = new HttpClient(new RewriteHostHandler(server.BaseUrl));
+        using var downloads = new DownloadManager(http);
+        var manager = new AddonManager(paths, downloads, new ReleaseCatalog(http));
+        var entry = new AddonEntry
+        {
+            Id = "atlasloot-turtle",
+            Name = "AtlasLoot Turtle WoW",
+            GitHubRepo = "Otari98/AtlasLoot"
+        };
+
+        await manager.InstallOrUpdateAsync(entry, paths.Client);
+
+        var installed = Path.Combine(paths.Client, "Interface", "AddOns", "AtlasLoot");
+        Assert.True(File.Exists(Path.Combine(installed, "AtlasLoot.toc")));
+        Assert.True(File.Exists(Path.Combine(installed, "Core.lua")));
+        Assert.False(Directory.Exists(Path.Combine(paths.Client, "Interface", "AddOns", "AtlasLoot-main")));
+        Assert.Equal(["AtlasLoot"], entry.FolderNames);
+    }
+
+    [Fact]
+    public void RepairFolderNames_RenamesFoldersThatDoNotMatchTheirToc()
+    {
+        using var tmp = new TempDir("addon-repair");
+        var paths = tmp.Paths();
+        paths.EnsureLayout();
+        var addOns = Path.Combine(paths.Client, "Interface", "AddOns");
+        var broken = Directory.CreateDirectory(Path.Combine(addOns, "AtlasLoot-main")).FullName;
+        File.WriteAllText(Path.Combine(broken, "AtlasLoot.toc"), "## Interface: 11200\n");
+        File.WriteAllText(Path.Combine(broken, "Core.lua"), "-- core");
+        var fine = Directory.CreateDirectory(Path.Combine(addOns, "pfQuest")).FullName;
+        File.WriteAllText(Path.Combine(fine, "pfQuest.toc"), "## Interface: 11200\n");
+
+        using var http = new HttpClient(new RewriteHostHandler("http://127.0.0.1:1/"));
+        using var downloads = new DownloadManager(http);
+        var manager = new AddonManager(paths, downloads, new ReleaseCatalog(http));
+        var atlasLoot = manager.Addons.First(a => a.Id == "atlasloot-turtle");
+        atlasLoot.Installed = true;
+        atlasLoot.FolderNames = ["AtlasLoot-main"];
+        var pfQuest = manager.Addons.First(a => a.Id == "pfquest");
+        pfQuest.Installed = true;
+        pfQuest.FolderNames = ["pfQuest"];
+
+        Assert.True(manager.RepairFolderNames(paths.Client));
+
+        var repaired = Path.Combine(addOns, "AtlasLoot");
+        Assert.Equal("-- core", File.ReadAllText(Path.Combine(repaired, "Core.lua")));
+        Assert.False(Directory.Exists(broken));
+        Assert.True(Directory.Exists(fine));
+        Assert.Equal(["AtlasLoot"], atlasLoot.FolderNames);
+        Assert.Equal(["pfQuest"], pfQuest.FolderNames);
+
+        var reloaded = new AddonManager(paths, downloads, new ReleaseCatalog(http));
+        Assert.Equal(["AtlasLoot"], reloaded.Addons.Single(a => a.Id == atlasLoot.Id).FolderNames);
+        Assert.False(reloaded.RepairFolderNames(paths.Client));
+    }
+
     private static AddonEntry SplitEntry() => new()
     {
         Id = "windrunner-voiceover-data",
@@ -213,6 +294,18 @@ public sealed class AddonManagerTests
             await File.WriteAllTextAsync(Path.Combine(addon, file.Name), file.Contents);
 
         var zip = tmp.Combine($"{id}.zip");
+        ArchiveUtil.ZipDirectory(source, zip);
+        return await File.ReadAllBytesAsync(zip);
+    }
+
+    private static async Task<byte[]> MakeArchiveWithFolderAsync(TempDir tmp, string folder, params (string Name, string Contents)[] files)
+    {
+        var source = tmp.Dir($"{folder}-src");
+        var addon = Directory.CreateDirectory(Path.Combine(source, folder)).FullName;
+        foreach (var file in files)
+            await File.WriteAllTextAsync(Path.Combine(addon, file.Name), file.Contents);
+
+        var zip = tmp.Combine($"{folder}.zip");
         ArchiveUtil.ZipDirectory(source, zip);
         return await File.ReadAllBytesAsync(zip);
     }

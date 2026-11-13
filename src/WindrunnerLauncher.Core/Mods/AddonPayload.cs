@@ -52,13 +52,10 @@ public static class AddonPayload
         if (depth > 6)
             return;
 
-        var toc = FirstToc(dir);
-        if (toc is not null)
+        var tocs = Tocs(dir);
+        if (tocs.Count > 0)
         {
-            // A zip that drops its files straight at the root, with no wrapping folder, has no
-            // real folder name to read - fall back to the .toc file's own base name.
-            var name = isRoot ? Path.GetFileNameWithoutExtension(toc) : Path.GetFileName(dir);
-            found.Add(new AddonFolder(name, dir));
+            found.Add(new AddonFolder(ResolveFolderName(dir, isRoot, tocs), dir));
             return;
         }
 
@@ -66,6 +63,72 @@ public static class AddonPayload
             Collect(child, isRoot: false, found, depth + 1);
     }
 
-    private static string? FirstToc(string dir) =>
-        Directory.EnumerateFiles(dir, "*.toc", SearchOption.TopDirectoryOnly).FirstOrDefault();
+    /// <summary>
+    /// The folder name an addon has to be installed under, read from the <c>.toc</c> files of an
+    /// already extracted folder, or <c>null</c> when the folder holds no addon.
+    /// </summary>
+    public static string? ResolveFolderName(string addonDir)
+    {
+        if (!Directory.Exists(addonDir))
+            return null;
+        var tocs = Tocs(addonDir);
+        return tocs.Count == 0 ? null : ResolveFolderName(addonDir, isRoot: false, tocs);
+    }
+
+    /// <summary>
+    /// World of Warcraft only loads a folder whose name matches the base name of its <c>.toc</c>
+    /// file, so the name is read from the <c>.toc</c> rather than from the directory. Downloads
+    /// arrive wrapped in a folder named after the archive instead ("AtlasLoot-main",
+    /// "repo-master"), which the game ignores.
+    /// </summary>
+    private static string ResolveFolderName(string dir, bool isRoot, List<string> tocs)
+    {
+        var names = tocs
+            .Select(toc => Path.GetFileNameWithoutExtension(toc))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var folder = Path.GetFileName(dir);
+        if (names.Count == 0)
+            return folder;
+
+        // A folder that already carries the right name keeps its exact casing.
+        if (!isRoot && names.Contains(folder, StringComparer.OrdinalIgnoreCase))
+            return folder;
+
+        if (names.Count == 1)
+            return names[0];
+
+        // Multi-flavour addons ship one .toc per client version (AtlasLoot.toc,
+        // AtlasLoot_Vanilla.toc, AtlasLoot-tbc.toc, ...). The prefix those names share is the
+        // folder name.
+        var shared = SharedPrefix(names);
+        if (shared.Length > 0)
+            return shared;
+
+        return names.OrderBy(name => name.Length).ThenBy(name => name, StringComparer.OrdinalIgnoreCase).First();
+    }
+
+    /// <summary>Longest prefix shared by every name, cut back to a separator boundary.</summary>
+    private static string SharedPrefix(List<string> names)
+    {
+        var prefix = names[0];
+        foreach (var name in names.Skip(1))
+        {
+            var length = 0;
+            while (length < prefix.Length && length < name.Length
+                   && char.ToLowerInvariant(prefix[length]) == char.ToLowerInvariant(name[length]))
+                length++;
+            prefix = prefix[..length];
+            if (prefix.Length == 0)
+                return "";
+        }
+
+        // "AtlasLoot_Vanilla" and "AtlasLoot_Wrath" share "AtlasLoot_"; the separator is not part of the name.
+        return prefix.TrimEnd('_', '-', '.', ' ');
+    }
+
+    private static List<string> Tocs(string dir) =>
+        Directory.EnumerateFiles(dir, "*.toc", SearchOption.TopDirectoryOnly).ToList();
 }

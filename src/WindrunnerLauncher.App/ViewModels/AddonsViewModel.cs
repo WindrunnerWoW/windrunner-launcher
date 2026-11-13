@@ -18,6 +18,7 @@ public sealed partial class AddonsViewModel : RuntimeViewModel, IDisposable
     {
         _manager = main.Runtime.Addons;
         Items = [];
+        _manager.RepairFolderNames(ClientDir);
         SyncFromManager();
         _manager.Changed += ManagerChanged;
         _ = RefreshUpdatesAsync();
