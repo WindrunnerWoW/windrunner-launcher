@@ -22,6 +22,7 @@ public sealed partial class ServerViewModel : RuntimeViewModel
     public event Action? CreateAccountRequested;
     public event Action? ChangePasswordRequested;
     public event Action? ChangeGmLevelRequested;
+    public event Action? ConfigureServerRequested;
 
     public ObservableCollection<SetupStage> SetupStages { get; } = [];
     public IProgress<SetupStage> SetupProgress { get; }
@@ -214,6 +215,7 @@ public sealed partial class ServerViewModel : RuntimeViewModel
     public bool CanStartStop => CanStart || CanStop;
     public bool CanCreateAccount => IsInstalled && !Main.IsBusy && !_serverActionInProgress;
     public bool CanManageAccounts => CanCreateAccount;
+    public bool CanConfigureServer => !Main.IsBusy && !_serverActionInProgress;
     public bool CanSendConsoleCommand => !Main.IsBusy && !_serverActionInProgress
         && Main.Status.ServerState is (ServerLifecycleState.Ready or ServerLifecycleState.RestartRequired)
         && !string.IsNullOrWhiteSpace(ConsoleCommand);
@@ -259,21 +261,6 @@ public sealed partial class ServerViewModel : RuntimeViewModel
         get => Settings.RealmAddress;
         set { Settings.RealmAddress = value; SaveSettings(); OnPropertyChanged(); }
     }
-    public int MysqlPort
-    {
-        get => Settings.MysqlPort;
-        set { Settings.MysqlPort = value; SaveSettings(); OnPropertyChanged(); }
-    }
-    public int AuthPort
-    {
-        get => Settings.AuthPort;
-        set { Settings.AuthPort = value; SaveSettings(); OnPropertyChanged(); }
-    }
-    public int WorldPort
-    {
-        get => Settings.WorldPort;
-        set { Settings.WorldPort = value; SaveSettings(); OnPropertyChanged(); }
-    }
     public bool StartWithClient
     {
         get => Settings.StartServerWithClient;
@@ -300,6 +287,12 @@ public sealed partial class ServerViewModel : RuntimeViewModel
 
     [RelayCommand(CanExecute = nameof(CanCreateAccount))]
     private void CreateAccount() => CreateAccountRequested?.Invoke();
+
+    [RelayCommand(CanExecute = nameof(CanConfigureServer))]
+    private void ConfigureServer() => ConfigureServerRequested?.Invoke();
+
+    /// <summary>Builds the dialog view model over the live runtime, so it reads the current conf files.</summary>
+    internal ServerConfigViewModel CreateConfigViewModel() => new(Main.Runtime);
 
     public async Task CreateAccountAsync(string username, string password)
     {
@@ -370,6 +363,7 @@ public sealed partial class ServerViewModel : RuntimeViewModel
         OnPropertyChanged(nameof(CanStartStop));
         OnPropertyChanged(nameof(CanCreateAccount));
         OnPropertyChanged(nameof(CanManageAccounts));
+        OnPropertyChanged(nameof(CanConfigureServer));
         OnPropertyChanged(nameof(CanSendConsoleCommand));
         OnPropertyChanged(nameof(CanUpdateServer));
         OnPropertyChanged(nameof(CanCheckServerUpdate));
@@ -384,6 +378,7 @@ public sealed partial class ServerViewModel : RuntimeViewModel
         CreateAccountCommand.NotifyCanExecuteChanged();
         ChangePasswordCommand.NotifyCanExecuteChanged();
         ChangeGmLevelCommand.NotifyCanExecuteChanged();
+        ConfigureServerCommand.NotifyCanExecuteChanged();
         SendConsoleCommandCommand.NotifyCanExecuteChanged();
     }
 
@@ -437,9 +432,6 @@ public sealed partial class ServerViewModel : RuntimeViewModel
         OnPropertyChanged(nameof(IsRunning));
         OnPropertyChanged(nameof(RealmName));
         OnPropertyChanged(nameof(RealmAddress));
-        OnPropertyChanged(nameof(MysqlPort));
-        OnPropertyChanged(nameof(AuthPort));
-        OnPropertyChanged(nameof(WorldPort));
         OnPropertyChanged(nameof(InstalledVersionText));
         OnPropertyChanged(nameof(LatestVersionText));
         OnPropertyChanged(nameof(HasServerUpdate));

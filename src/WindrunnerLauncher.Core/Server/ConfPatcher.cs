@@ -38,7 +38,11 @@ public sealed class ConfPatcher
     /// Overwrites live confs from dist when one exists (otherwise keeps the shipped live conf),
     /// then patches database lines and known keys. <c>ahbot.conf</c> is copied only.
     /// </summary>
-    public void Apply()
+    /// <param name="tuning">
+    /// Player-chosen conf overrides keyed by <see cref="ServerConfigCatalog"/> entry id. Applied last
+    /// so they win over the shipped dist values.
+    /// </param>
+    public void Apply(IReadOnlyDictionary<string, string>? tuning = null)
     {
         _env.Reload();
         Directory.CreateDirectory(_paths.ServerBinaries);
@@ -56,6 +60,28 @@ public sealed class ConfPatcher
             // Release zips may ship ready-made live confs with no dist; those are patched in place.
             if (patch)
                 PatchLive(liveName, live);
+        }
+
+        ApplyTuning(tuning);
+    }
+
+    /// <summary>
+    /// Writes the player's conf overrides into the live files. Keys without an override are left
+    /// alone, so the shipped values keep applying.
+    /// </summary>
+    public void ApplyTuning(IReadOnlyDictionary<string, string>? tuning)
+    {
+        if (tuning is null || tuning.Count == 0)
+            return;
+
+        foreach (var entry in ServerConfigCatalog.Entries)
+        {
+            if (!tuning.TryGetValue(entry.Id, out var value) || string.IsNullOrWhiteSpace(value))
+                continue;
+            var path = Path.Combine(_paths.ServerBinaries, entry.File);
+            if (!File.Exists(path))
+                continue;
+            ServerConfigFile.Write(path, entry.Section, entry.Key, value.Trim());
         }
     }
 

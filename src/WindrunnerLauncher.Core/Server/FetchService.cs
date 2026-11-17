@@ -362,6 +362,8 @@ public sealed class FetchService : IDisposable
     {
         if (GoogleDrive.FileId(raw) is { } driveId)
             log?.Invoke("Google Drive file id " + driveId);
+        if (FuckingFast.FileId(raw) is { } fileId)
+            log?.Invoke("fuckingfast.net file id " + fileId);
 
         await _downloads.DownloadAsync(new DownloadRequest
         {
@@ -374,7 +376,8 @@ public sealed class FetchService : IDisposable
         if (!ServerUtil.LooksLikeZip(outFile))
         {
             File.Delete(outFile);
-            throw new InvalidDataException("downloaded file is not a zip (got a webpage). Need a direct zip URL or a public Google Drive share link.");
+            throw new InvalidDataException(
+                "downloaded file is not a zip (got a webpage). Need a direct zip URL, a public Google Drive share link, or a fuckingfast.net file page.");
         }
     }
 
