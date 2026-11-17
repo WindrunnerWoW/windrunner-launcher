@@ -84,6 +84,14 @@ public sealed class LauncherSettings
     public string HearthstoneBranch { get; set; } = Hearthstone.HearthstoneModuleSource.DefaultBranch;
 
     public ServerFriendlySettings Server { get; set; } = new();
+
+    /// <summary>
+    /// Server conf overrides written by the server configuration dialog, keyed by
+    /// <c>ServerConfigCatalog</c> entry id. Only keys the player changed are stored, so untouched
+    /// values keep following the shipped conf.
+    /// </summary>
+    public Dictionary<string, string> ServerTuning { get; set; } = new(StringComparer.Ordinal);
+
     public VanillaTweaksSettings VanillaTweaks { get; set; } = new();
 }
 

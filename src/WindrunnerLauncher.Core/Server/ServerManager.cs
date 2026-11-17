@@ -123,7 +123,7 @@ public sealed class ServerManager : IDisposable
             _stopping = false;
             _readinessUnconfirmed = false;
             _env.WriteFriendlySettings(_state.Settings.Server);
-            _conf.Apply();
+            _conf.Apply(_state.Settings.ServerTuning);
             ServerUtil.AssertMapsPresent(_paths.Maps);
 
             var mangosd = RequireBinary("mangosd");
@@ -298,16 +298,35 @@ public sealed class ServerManager : IDisposable
     {
         ThrowIfDisposed();
         var before = SnapshotLiveSettings();
+        var beforeTuning = SnapshotTuning();
         var running = ProcessesRunning || _stateValue is ServerLifecycleState.Ready
             or ServerLifecycleState.InitializingWorld
             or ServerLifecycleState.StartingAuth
             or ServerLifecycleState.StartingDatabase
             or ServerLifecycleState.RestartRequired;
         _env.WriteFriendlySettings(_state.Settings.Server);
-        _conf.Apply();
+        _conf.Apply(_state.Settings.ServerTuning);
         var after = SnapshotLiveSettings();
-        if (running && !before.Equals(after))
+        if (running && (!before.Equals(after) || beforeTuning != SnapshotTuning()))
             MarkRestartRequired();
+    }
+
+    /// <summary>Every catalogued conf value as it currently sits in the live files.</summary>
+    private string SnapshotTuning()
+    {
+        var files = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var parts = new List<string>(ServerConfigCatalog.Entries.Count);
+        foreach (var entry in ServerConfigCatalog.Entries)
+        {
+            if (!files.TryGetValue(entry.File, out var text))
+            {
+                var path = Path.Combine(_paths.ServerBinaries, entry.File);
+                text = File.Exists(path) ? File.ReadAllText(path) : null;
+                files[entry.File] = text;
+            }
+            parts.Add(entry.Id + "=" + (text is null ? "" : ServerConfigFile.ReadValue(text, entry.Section, entry.Key) ?? ""));
+        }
+        return string.Join("\n", parts);
     }
 
     public Task CreateAccountAsync(string username, string password, CancellationToken ct) =>

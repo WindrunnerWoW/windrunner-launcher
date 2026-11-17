@@ -33,13 +33,19 @@ public sealed class DownloadManager : IDisposable
 
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
+    private readonly Func<string, CancellationToken, Task<string>> _resolveShareLink;
     private readonly Dictionary<string, CancellationTokenSource> _running = new();
     private readonly object _gate = new();
     private bool _disposed;
 
     public event Action<DownloadProgress>? Progress;
 
-    public DownloadManager(HttpClient? http = null)
+    /// <param name="resolveShareLink">
+    /// Turns a file-hosting share page into a direct link. Defaults to <see cref="FuckingFast"/>.
+    /// </param>
+    public DownloadManager(
+        HttpClient? http = null,
+        Func<string, CancellationToken, Task<string>>? resolveShareLink = null)
     {
         _ownsHttp = http is null;
         _http = http ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = true })
@@ -48,6 +54,7 @@ public sealed class DownloadManager : IDisposable
         };
         if (!_http.DefaultRequestHeaders.UserAgent.Any())
             _http.DefaultRequestHeaders.UserAgent.ParseAdd("WindrunnerLauncher/0.1");
+        _resolveShareLink = resolveShareLink ?? FuckingFast.ResolveAsync;
     }
 
     public async Task DownloadAsync(DownloadRequest request, CancellationToken external = default)
@@ -135,6 +142,12 @@ public sealed class DownloadManager : IDisposable
 
     private async Task DownloadOnceAsync(DownloadRequest request, string partial, int attempt, CancellationToken ct)
     {
+        if (FuckingFast.FileId(request.Url) is not null)
+        {
+            await DownloadFromSharePageAsync(request, partial, attempt, ct).ConfigureAwait(false);
+            return;
+        }
+
         var driveId = GoogleDrive.FileId(request.Url);
         if (driveId is null)
         {
@@ -169,10 +182,22 @@ public sealed class DownloadManager : IDisposable
             throw new InvalidDataException("Google Drive did not return the file. Share it as \"Anyone with the link can view\".");
     }
 
+    /// <summary>
+    /// Resolves a file-hosting share page to its direct link and downloads that. The page mints a
+    /// short-lived token, so the link is resolved again for every attempt; the resume record is
+    /// keyed on the stable page URL so a partial download survives the token rotating.
+    /// </summary>
+    private async Task DownloadFromSharePageAsync(DownloadRequest request, string partial, int attempt, CancellationToken ct)
+    {
+        var direct = await _resolveShareLink(request.Url, ct).ConfigureAwait(false);
+        if (!await StreamToFileAsync(request, direct, null, partial, attempt, rejectHtml: true, resume: true, ct, resumeKey: request.Url).ConfigureAwait(false))
+            throw new InvalidDataException("The share page did not return the file.");
+    }
+
     /// <summary>Returns false without writing anything when <paramref name="rejectHtml"/> is set and the server answered with a web page.</summary>
     private async Task<bool> StreamToFileAsync(
         DownloadRequest request, string url, string? userAgent, string partial, int attempt, bool rejectHtml, bool resume,
-        CancellationToken ct)
+        CancellationToken ct, string? resumeKey = null)
     {
         using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
         stall.CancelAfter(request.StallTimeout);
@@ -180,7 +205,8 @@ public sealed class DownloadManager : IDisposable
         {
             var resumeInfo = ResumeInfoPath(partial);
             var validator = "";
-            var offset = resume ? ResumableLength(partial, resumeInfo, url, out validator) : 0;
+            var resumeIdentity = resumeKey ?? url;
+            var offset = resume ? ResumableLength(partial, resumeInfo, resumeIdentity, out validator) : 0;
 
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             if (userAgent is not null)
@@ -210,7 +236,7 @@ public sealed class DownloadManager : IDisposable
             if (!append)
                 offset = 0;
             if (resume)
-                WriteResumeInfo(resumeInfo, url, resp);
+                WriteResumeInfo(resumeInfo, resumeIdentity, resp);
 
             var length = resp.Content.Headers.ContentLength;
             long? total = length is null ? null : offset + length;

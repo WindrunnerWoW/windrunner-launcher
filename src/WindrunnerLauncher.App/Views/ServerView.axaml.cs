@@ -27,6 +27,7 @@ public sealed partial class ServerView : UserControl
         vm.CreateAccountRequested += CreateAccount;
         vm.ChangePasswordRequested += ChangePassword;
         vm.ChangeGmLevelRequested += ChangeGmLevel;
+        vm.ConfigureServerRequested += ConfigureServer;
     }
 
     private void Detach()
@@ -37,6 +38,7 @@ public sealed partial class ServerView : UserControl
         vm.CreateAccountRequested -= CreateAccount;
         vm.ChangePasswordRequested -= ChangePassword;
         vm.ChangeGmLevelRequested -= ChangeGmLevel;
+        vm.ConfigureServerRequested -= ConfigureServer;
         _attachedViewModel = null;
     }
 
@@ -73,5 +75,16 @@ public sealed partial class ServerView : UserControl
         var result = await new ChangeGmLevelDialog().ShowDialog<GmLevelChange?>(owner);
         if (result is not null)
             await vm.ChangeGmLevelAsync(result.Username, result.GmLevel);
+    }
+
+    private async void ConfigureServer()
+    {
+        if (DataContext is not ServerViewModel vm || TopLevel.GetTopLevel(this) is not Window owner)
+            return;
+        var config = vm.CreateConfigViewModel();
+        var dialog = new ServerConfigDialog { DataContext = config };
+        config.Saved += () => dialog.Close(true);
+        config.Cancelled += () => dialog.Close(false);
+        await dialog.ShowDialog<bool>(owner);
     }
 }

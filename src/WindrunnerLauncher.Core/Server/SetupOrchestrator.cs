@@ -106,7 +106,7 @@ public sealed class SetupOrchestrator
 
             await StageAsync(progress, "patch-confs", ct, () =>
             {
-                _conf.Apply();
+                _conf.Apply(_state.Settings.ServerTuning);
                 return Task.CompletedTask;
             }).ConfigureAwait(false);
 
