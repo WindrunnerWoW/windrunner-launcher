@@ -545,11 +545,14 @@ public sealed class ExecutablePatchHandler : IModHandler
 /// </summary>
 public sealed class ConfigurationHandler : IModHandler
 {
+    /// <summary>The manifest asset whose CVar values follow the launcher's memory dropdown.</summary>
+    public const string ScriptMemoryAssetId = "script_memory";
+
     public ModKind Kind => ModKind.Configuration;
 
     public bool IsApplied(ModApplyContext ctx)
     {
-        var wanted = ParseValues(ctx.Asset);
+        var wanted = WantedValues(ctx);
         if (wanted.Count == 0)
             return false;
         var current = ConfigWtf.Read(ConfigPath(ctx));
@@ -561,7 +564,7 @@ public sealed class ConfigurationHandler : IModHandler
 
     public Task<ModApplyOutcome> EnableAsync(ModApplyContext ctx, CancellationToken ct = default)
     {
-        var wanted = ParseValues(ctx.Asset);
+        var wanted = WantedValues(ctx);
         if (wanted.Count == 0)
             return Task.FromResult(ModApplyOutcome.Skip($"{ctx.Asset.Id} declares no configuration values."));
 
@@ -571,12 +574,28 @@ public sealed class ConfigurationHandler : IModHandler
 
     public Task<ModApplyOutcome> DisableAsync(ModApplyContext ctx, CancellationToken ct = default)
     {
-        var wanted = ParseValues(ctx.Asset);
+        var wanted = WantedValues(ctx);
         if (wanted.Count == 0)
             return Task.FromResult(ModApplyOutcome.NoChange("Nothing to remove."));
 
         ConfigWtf.Remove(ConfigPath(ctx), wanted.Keys);
         return Task.FromResult(ModApplyOutcome.Ok($"Removed {wanted.Count} Config.wtf value(s)."));
+    }
+
+    /// <summary>
+    /// The manifest pair, except for the Lua memory asset: there the launcher's memory selection
+    /// replaces both ceilings so the dropdown in the mods dialog is authoritative.
+    /// </summary>
+    private static Dictionary<string, string> WantedValues(ModApplyContext ctx)
+    {
+        var values = ParseValues(ctx.Asset);
+        if (string.Equals(ctx.Asset.Id, ScriptMemoryAssetId, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var pair in ScriptMemoryOptions.Values(ctx.State.Settings.ScriptMemoryMegabytes))
+                values[pair.Key] = pair.Value;
+        }
+
+        return values;
     }
 
     private static string ConfigPath(ModApplyContext ctx) =>

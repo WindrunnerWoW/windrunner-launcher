@@ -9,6 +9,10 @@ namespace WindrunnerLauncher.App.ViewModels;
 
 public sealed partial class ModsViewModel : RuntimeViewModel
 {
+    /// <summary>Memory ceilings offered for the "Raise Lua script memory" asset.</summary>
+    internal static readonly IReadOnlyList<ScriptMemoryChoice> AllScriptMemoryChoices =
+        [.. ScriptMemoryOptions.Megabytes.Select(megabytes => new ScriptMemoryChoice(megabytes))];
+
     private readonly List<ClientMpqItemViewModel> _allMpqItems = [];
     private bool _showAllMpqs;
 
@@ -333,6 +337,7 @@ public sealed partial class ModItemViewModel : ObservableObject
     private readonly MainViewModel _main;
     private readonly RealmEntry _realm;
     private readonly string _assetId;
+    private ScriptMemoryChoice _scriptMemoryChoice;
 
     public ModItemViewModel(ModsViewModel options, MainViewModel main, RealmEntry realm, ModListItem row)
     {
@@ -351,12 +356,32 @@ public sealed partial class ModItemViewModel : ObservableObject
         HasDownloadSource = Supported && (!string.IsNullOrWhiteSpace(row.Asset.DownloadUrl)
             || !string.IsNullOrWhiteSpace(row.Asset.GitHubRepo));
         _enabled = row.Enabled;
+        _scriptMemoryChoice = ScriptMemoryChoices.First(choice =>
+            choice.Megabytes == ScriptMemoryOptions.Normalize(main.Runtime.State.Settings.ScriptMemoryMegabytes));
     }
 
     public string Name { get; }
     public string Description { get; }
     public ModsViewModel Options { get; }
     public bool IsVanillaTweaks => _assetId == "vanilla_tweaks";
+    public bool IsScriptMemory => _assetId == ConfigurationHandler.ScriptMemoryAssetId;
+    public bool ShowScriptMemoryOptions => IsScriptMemory && Enabled;
+    public IReadOnlyList<ScriptMemoryChoice> ScriptMemoryChoices => ModsViewModel.AllScriptMemoryChoices;
+
+    /// <summary>The ceiling remembered for this client; changing it rewrites Config.wtf when the asset is on.</summary>
+    public ScriptMemoryChoice SelectedScriptMemory
+    {
+        get => _scriptMemoryChoice;
+        set
+        {
+            if (value is null || value.Megabytes == _scriptMemoryChoice.Megabytes)
+                return;
+            _scriptMemoryChoice = value;
+            OnPropertyChanged();
+            _ = ApplyScriptMemoryAsync();
+        }
+    }
+
     public bool Unmanaged { get; }
     public bool Required { get; }
     public bool Supported { get; }
@@ -382,9 +407,20 @@ public sealed partial class ModItemViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(AvailabilityLabel))]
     [NotifyPropertyChangedFor(nameof(IsEnableAction))]
     [NotifyPropertyChangedFor(nameof(IsDisableAction))]
+    [NotifyPropertyChangedFor(nameof(ShowScriptMemoryOptions))]
     private bool _enabled;
 
     partial void OnEnabledChanged(bool value) => Options.NotifyModsSummaryChanged();
+
+    private async Task ApplyScriptMemoryAsync()
+    {
+        _main.Runtime.State.Settings.ScriptMemoryMegabytes = _scriptMemoryChoice.Megabytes;
+        _main.Runtime.State.SaveSettings();
+        if (!Enabled)
+            return;
+
+        await _main.RunGuardedAsync(() => _main.Runtime.Mods.MaterializeAsync(_realm));
+    }
 
     [RelayCommand]
     private async Task DownloadAsync()
@@ -407,4 +443,10 @@ public sealed partial class ModItemViewModel : ObservableObject
             Enabled = desired;
         }
     }
+}
+
+/// <summary>One entry in the Lua memory dropdown.</summary>
+public sealed record ScriptMemoryChoice(int Megabytes)
+{
+    public string Label => $"{Megabytes} MB";
 }

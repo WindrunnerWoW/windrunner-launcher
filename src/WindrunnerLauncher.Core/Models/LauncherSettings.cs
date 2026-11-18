@@ -93,6 +93,12 @@ public sealed class LauncherSettings
     public Dictionary<string, string> ServerTuning { get; set; } = new(StringComparer.Ordinal);
 
     public VanillaTweaksSettings VanillaTweaks { get; set; } = new();
+
+    /// <summary>
+    /// Lua memory ceiling for the "Raise Lua script memory" asset, in megabytes. One of
+    /// <see cref="Mods.ScriptMemoryOptions.Megabytes"/>; 16 is the value the manifest has always shipped.
+    /// </summary>
+    public int ScriptMemoryMegabytes { get; set; } = Mods.ScriptMemoryOptions.DefaultMegabytes;
 }
 
 public enum LinuxRunnerMode

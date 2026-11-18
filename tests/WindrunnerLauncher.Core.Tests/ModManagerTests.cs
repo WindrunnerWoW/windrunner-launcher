@@ -362,6 +362,44 @@ public class ModManagerTests
     }
 
     [Fact]
+    public async Task Configuration_ScriptMemoryPreset_ScalesBothCeilings()
+    {
+        using var f = new Fixture();
+        var config = f.Live("WTF", "Config.wtf");
+        Directory.CreateDirectory(Path.GetDirectoryName(config)!);
+        File.WriteAllText(config, "SET locale \"enUS\"\n");
+
+        f.State.Settings.ScriptMemoryMegabytes = 256;
+        await f.Mods.SetEnabledAsync(f.Realm, "script_memory", true);
+
+        var values = Client.ConfigWtf.Read(config);
+        Assert.Equal("262144", values["scriptMemory"]);
+        Assert.Equal("262144", values["maxAddOnMemory"]);
+        Assert.Equal("enUS", values["locale"]);
+
+        f.State.Settings.ScriptMemoryMegabytes = 512;
+        await f.Mods.MaterializeAsync(f.Realm);
+
+        values = Client.ConfigWtf.Read(config);
+        Assert.Equal("524288", values["scriptMemory"]);
+        Assert.Equal("524288", values["maxAddOnMemory"]);
+        Assert.Equal("enUS", values["locale"]);
+    }
+
+    [Theory]
+    [InlineData(16, "16384", "131072")]
+    [InlineData(128, "131072", "131072")]
+    [InlineData(256, "262144", "262144")]
+    [InlineData(512, "524288", "524288")]
+    [InlineData(999, "16384", "131072")]
+    public void ScriptMemoryOptions_MapMegabytesToKilobytes(int megabytes, string scriptMemory, string maxAddOnMemory)
+    {
+        var values = ScriptMemoryOptions.Values(megabytes);
+        Assert.Equal(scriptMemory, values["scriptMemory"]);
+        Assert.Equal(maxAddOnMemory, values["maxAddOnMemory"]);
+    }
+
+    [Fact]
     public async Task VanillaTweaks_ReappliesWhenSettingsChange()
     {
         using var f = new Fixture();
