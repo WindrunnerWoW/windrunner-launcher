@@ -197,6 +197,7 @@ public sealed class ModManager : IManagedAssetRepairer
 
     public List<ModListItem> ListItems(RealmEntry realm)
     {
+        AdoptUserInstalled(realm);
         var items = new List<ModListItem>(_manifest.Assets.Count);
         foreach (var asset in _manifest.Assets)
         {
@@ -413,21 +414,152 @@ public sealed class ModManager : IManagedAssetRepairer
     }
 
 
-    /// <summary>Downloads an asset for later use without changing its enabled state.</summary>
+    /// <summary>
+    /// Downloads an asset and any missing dependencies for later use without changing their
+    /// enabled state.
+    /// </summary>
     public async Task DownloadAssetAsync(RealmEntry realm, string assetId, CancellationToken ct = default)
     {
         var asset = Find(assetId) ?? throw new KeyNotFoundException($"Unknown managed asset: {assetId}");
         if (!ModHandlers.IsSupported(asset.Kind))
             throw new InvalidOperationException($"{Display(asset)} is not supported by this launcher.");
-        if (IsInstalled(realm, asset))
-            return;
-        if (string.IsNullOrWhiteSpace(asset.DownloadUrl) && string.IsNullOrWhiteSpace(asset.GitHubRepo))
-            throw new InvalidOperationException($"{Display(asset)} has no download source. Add its files to mods/{asset.Id}.");
+        if (!IsInstalled(realm, asset) && !HasDownloadSource(asset))
+            throw new InvalidOperationException($"{Display(asset)} has no download source. {ManualInstallHint(asset)}.");
 
-        if (await EnsurePayloadAsync(asset, ct).ConfigureAwait(false) is null || !IsInstalled(realm, asset))
-            throw new InvalidDataException($"Downloaded {Display(asset)}, but its expected files were not found in mods/{asset.Id}.");
+        await EnsureAvailableAsync(realm, asset, ct).ConfigureAwait(false);
         Changed?.Invoke();
     }
+
+    public static bool HasDownloadSource(ManagedAsset asset) =>
+        !string.IsNullOrWhiteSpace(asset.DownloadUrl) || !string.IsNullOrWhiteSpace(asset.GitHubRepo);
+
+    /// <summary>Where a player puts the files of an asset that cannot be downloaded, by kind.</summary>
+    public static string ManualInstallHint(ManagedAsset asset)
+    {
+        var store = $"mods/{asset.Id}";
+        var leaf = ModPaths.LeafName(asset.Destination);
+        return asset.Kind switch
+        {
+            ModKind.Mpq => $"Put {leaf} in {store} or in the client's Data folder",
+            ModKind.Dll => $"Put {leaf} in {store} or next to WoW.exe",
+            ModKind.AddOn => $"Put the {leaf} folder (or a zip containing it) in {store}",
+            ModKind.ZipRoot => $"Put the release .zip in {store}",
+            ModKind.Dxvk => $"Put d3d9.dll or the DXVK release archive in {store}",
+            ModKind.ExecutablePatch => $"Put {VanillaTweaks.ToolName} or its release zip in {store}",
+            _ => $"Add its files to {store}"
+        };
+    }
+
+    /// <summary>
+    /// Makes the asset and every dependency available offline: whatever is missing and has a
+    /// download source is fetched now; anything missing without one is reported, with the file
+    /// the player has to supply and where it goes.
+    /// </summary>
+    private async Task EnsureAvailableAsync(RealmEntry realm, ManagedAsset asset, CancellationToken ct)
+    {
+        var missing = new List<ManagedAsset>();
+        foreach (var current in Closure(asset))
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!ModHandlers.IsSupported(current.Kind))
+                throw new InvalidOperationException(
+                    $"{Display(asset)} needs {Display(current)}, which this launcher cannot install.");
+            if (IsInstalled(realm, current))
+                continue;
+            if (!HasDownloadSource(current))
+            {
+                missing.Add(current);
+                continue;
+            }
+
+            await EnsurePayloadAsync(current, ct).ConfigureAwait(false);
+            if (!IsInstalled(realm, current))
+                throw new InvalidDataException(
+                    $"Downloaded {Display(current)}, but {ExpectedPayload(current)} was not found in mods/{current.Id}.");
+        }
+
+        if (missing.Count == 0)
+            return;
+
+        var lines = missing.Select(m => ReferenceEquals(m, asset)
+            ? $"{ManualInstallHint(m)}."
+            : $"{Display(asset)} needs {Display(m)}, which has no download source. {ManualInstallHint(m)}.");
+        throw new InvalidOperationException(string.Join(Environment.NewLine, lines));
+    }
+
+    /// <summary>The asset followed by its transitive dependencies, dependencies first.</summary>
+    private List<ManagedAsset> Closure(ManagedAsset asset)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ordered = new List<ManagedAsset>();
+        Visit(asset);
+        return ordered;
+
+        void Visit(ManagedAsset current)
+        {
+            if (!seen.Add(current.Id))
+                return;
+            foreach (var dependencyId in current.Dependencies)
+            {
+                if (Find(dependencyId) is { } dependency)
+                    Visit(dependency);
+            }
+            ordered.Add(current);
+        }
+    }
+
+    private static string ExpectedPayload(ManagedAsset asset) => asset.Kind switch
+    {
+        ModKind.Mpq or ModKind.Dll or ModKind.AddOn => ModPaths.LeafName(asset.Destination),
+        ModKind.Dxvk => "d3d9.dll",
+        ModKind.ExecutablePatch => VanillaTweaks.ToolName,
+        _ => "its payload"
+    };
+
+    /// <summary>
+    /// Files a player installed by hand, such as <c>patch-A.mpq</c> already in Data or
+    /// <c>VanillaHelpers.dll</c> next to WoW.exe, belong to the player. While no realm on the same
+    /// client has a recorded choice for the asset, finding it live means "keep it on" rather than
+    /// "the manifest default says off, move it into mods/". Without this, the first Play after
+    /// installing an HD patch by hand pulled patch-A/B out of Data and broke the patches that
+    /// build on them.
+    /// </summary>
+    public bool AdoptUserInstalled(RealmEntry realm)
+    {
+        var clientDir = ClientDirFor(realm);
+        if (!Directory.Exists(clientDir))
+            return false;
+
+        var sameClient = _state.Realms.Realms
+            .Where(r => !ReferenceEquals(r, realm) && SamePath(ClientDirFor(r), clientDir))
+            .Append(realm)
+            .ToList();
+
+        var adopted = false;
+        foreach (var asset in _manifest.Assets)
+        {
+            if (asset.Required || asset.DefaultEnabled || !ModHandlers.IsSupported(asset.Kind))
+                continue;
+            if (sameClient.Any(r => r.ManagedModState.ContainsKey(asset.Id)))
+                continue;
+            if (!ModHandlers.For(asset.Kind).IsApplied(BuildContext(realm, asset)))
+                continue;
+
+            foreach (var r in sameClient)
+                r.ManagedModState[asset.Id] = true;
+            adopted = true;
+        }
+
+        if (adopted)
+            _state.SaveRealms();
+        return adopted;
+    }
+
+    private static bool SamePath(string a, string b) =>
+        string.Equals(
+            Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     /// <summary>
     /// Records the desired state for a realm and immediately reconciles the client:
@@ -443,16 +575,17 @@ public sealed class ModManager : IManagedAssetRepairer
         if (!enabled && asset.Required)
             throw new InvalidOperationException($"{asset.DisplayName} is required and cannot be disabled.");
         if (enabled)
-            AssertAvailableOffline(realm, asset);
+            await EnsureAvailableAsync(realm, asset, ct).ConfigureAwait(false);
 
         var previous = realm.ManagedModState.ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
         realm.ManagedModState[asset.Id] = enabled;
 
         if (enabled)
         {
-            foreach (var dependency in asset.Dependencies)
+            // Transitively: an HD patch needs VanillaHelpers, which needs VanillaFixes to load it.
+            foreach (var dep in Closure(asset))
             {
-                if (Find(dependency) is { } dep && !DesiredState(realm, dep))
+                if (!ReferenceEquals(dep, asset) && !DesiredState(realm, dep))
                     realm.ManagedModState[dep.Id] = true;
             }
 
@@ -466,12 +599,10 @@ public sealed class ModManager : IManagedAssetRepairer
         }
         else
         {
-            // Anything that depends on this asset can no longer stay enabled.
-            foreach (var dependent in _manifest.Assets.Where(a =>
-                         !a.Required && a.Dependencies.Contains(asset.Id, StringComparer.OrdinalIgnoreCase)))
-            {
+            // Anything that depends on this asset, directly or through another asset (Ultra HD
+            // needs HD Character Textures, which needs HD Characters), can no longer stay enabled.
+            foreach (var dependent in _manifest.Assets.Where(a => !a.Required && DependsOn(a, asset.Id)))
                 realm.ManagedModState[dependent.Id] = false;
-            }
         }
 
         _state.SaveRealms();
@@ -491,26 +622,6 @@ public sealed class ModManager : IManagedAssetRepairer
         }
     }
 
-    private void AssertAvailableOffline(RealmEntry realm, ManagedAsset asset)
-    {
-        var pending = new Stack<ManagedAsset>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        pending.Push(asset);
-        while (pending.Count > 0)
-        {
-            var current = pending.Pop();
-            if (!seen.Add(current.Id))
-                continue;
-            if (!ModHandlers.IsSupported(current.Kind) || !IsInstalled(realm, current))
-                throw new InvalidOperationException($"Download {Display(current)} before enabling {Display(asset)}. If it has no download source, add its files to mods/{current.Id}.");
-            foreach (var dependencyId in current.Dependencies)
-            {
-                if (Find(dependencyId) is { } dependency)
-                    pending.Push(dependency);
-            }
-        }
-    }
-
     /// <summary>
     /// Moves managed assets between <c>mods/</c> and the client until the realm's desired state is
     /// satisfied. Called by the Play pipeline, so by default nothing is downloaded here.
@@ -525,6 +636,7 @@ public sealed class ModManager : IManagedAssetRepairer
     {
         var log = new List<string>();
         var clientDir = ClientDirFor(realm);
+        AdoptUserInstalled(realm);
         var desired = ResolveDesiredState(realm);
         if (!Directory.Exists(clientDir))
         {
@@ -579,7 +691,8 @@ public sealed class ModManager : IManagedAssetRepairer
             var vanillaSettingsChanged = asset.Kind == ModKind.ExecutablePatch
                 && ctx.CleanExecutableBackup is { } backup
                 && !VanillaTweaks.IsCurrent(ctx.ClientDir, backup, _state.Settings.VanillaTweaks);
-            if (handler.IsApplied(ctx) && ChecksumMatches(ctx, asset) && !vanillaSettingsChanged)
+            var unregisteredDll = asset.Kind == ModKind.Dll && !DllHandler.IsRegistered(ctx);
+            if (handler.IsApplied(ctx) && ChecksumMatches(ctx, asset) && !vanillaSettingsChanged && !unregisteredDll)
                 continue;
 
             string? downloaded = null;
@@ -819,9 +932,13 @@ public sealed class ModManager : IManagedAssetRepairer
 
             if (ready.Count == 0)
             {
-                // Dependency cycle or unresolvable graph: keep manifest order for the rest.
-                ordered.AddRange(remaining);
-                break;
+                // A set that must be installed together (HD Buildings, Doodads and Environment
+                // each depend on the other two) is a cycle. Break it at the first asset whose
+                // dependencies outside the cycle are already placed, then keep ordering the rest.
+                ready = [remaining.FirstOrDefault(a => a.Dependencies.All(d =>
+                             placed.Contains(d) || Find(d) is null
+                             || remaining.Any(r => r.Id.Equals(d, StringComparison.OrdinalIgnoreCase) && DependsOn(r, a.Id))))
+                         ?? remaining[0]];
             }
 
             foreach (var asset in ready)
@@ -834,6 +951,10 @@ public sealed class ModManager : IManagedAssetRepairer
 
         return ordered;
     }
+
+    /// <summary>True when <paramref name="asset"/> needs <paramref name="dependencyId"/>, directly or transitively.</summary>
+    private bool DependsOn(ManagedAsset asset, string dependencyId) =>
+        Closure(asset).Any(a => !ReferenceEquals(a, asset) && a.Id.Equals(dependencyId, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Compares the live single-file payload against the manifest checksum. Assets without a

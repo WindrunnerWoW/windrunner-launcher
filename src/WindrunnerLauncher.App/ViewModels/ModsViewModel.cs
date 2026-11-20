@@ -353,8 +353,8 @@ public sealed partial class ModItemViewModel : ObservableObject
         Required = row.Asset.Required;
         Supported = ModHandlers.IsSupported(row.Asset.Kind);
         Installed = row.Installed;
-        HasDownloadSource = Supported && (!string.IsNullOrWhiteSpace(row.Asset.DownloadUrl)
-            || !string.IsNullOrWhiteSpace(row.Asset.GitHubRepo));
+        HasDownloadSource = Supported && ModManager.HasDownloadSource(row.Asset);
+        ManualInstallHint = ModManager.ManualInstallHint(row.Asset);
         _enabled = row.Enabled;
         _scriptMemoryChoice = ScriptMemoryChoices.First(choice =>
             choice.Megabytes == ScriptMemoryOptions.Normalize(main.Runtime.State.Settings.ScriptMemoryMegabytes));
@@ -387,6 +387,7 @@ public sealed partial class ModItemViewModel : ObservableObject
     public bool Supported { get; }
     public bool Installed { get; }
     public bool HasDownloadSource { get; }
+    public string ManualInstallHint { get; }
     public bool CanDownload => !Unmanaged && !Installed && HasDownloadSource;
     public bool CanToggle => Supported && !Unmanaged && !Required && (Enabled || Installed);
     public string KindLabel => Unmanaged ? "UNMANAGED" : Required ? "REQUIRED" : "OPTIONAL";
@@ -399,7 +400,7 @@ public sealed partial class ModItemViewModel : ObservableObject
         : !Supported ? "Not supported yet"
         : Enabled && Installed ? "Enabled"
         : Installed ? HasDownloadSource ? "Cached for offline use" : "Ready"
-        : HasDownloadSource ? "Download before enabling" : "Add files to the mods folder";
+        : HasDownloadSource ? "Download before enabling" : ManualInstallHint;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ToggleLabel))]
