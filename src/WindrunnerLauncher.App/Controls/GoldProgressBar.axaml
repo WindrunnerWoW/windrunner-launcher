@@ -5,6 +5,8 @@
   <Grid RowDefinitions="Auto,6" RowSpacing="5">
     <TextBlock Text="{Binding Caption, ElementName=Root}"
                FontSize="11"
+               TextWrapping="NoWrap"
+               TextTrimming="CharacterEllipsis"
                Foreground="{DynamicResource AppMutedBrush}" />
     <Border Grid.Row="1"
             Background="#0D0A08"
