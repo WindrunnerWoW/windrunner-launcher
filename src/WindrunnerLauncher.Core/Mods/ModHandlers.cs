@@ -141,8 +141,12 @@ internal static class ModFileOps
     /// <summary>
     /// Resolves a payload inside <c>mods/&lt;assetId&gt;</c>. Downloads arrive as archives, so any
     /// zip in the store is unpacked once and then searched for the expected entry.
+    ///
+    /// With <paramref name="singleFileFallback"/>, a store that holds exactly one file with the
+    /// expected extension (a player dropped <c>Patch-A_HD.mpq</c> where <c>patch-A.mpq</c> was
+    /// expected) resolves to that file. It is renamed to the expected name when it goes live.
     /// </summary>
-    public static string? ResolveStoreEntry(string storeDir, string name, bool directory)
+    public static string? ResolveStoreEntry(string storeDir, string name, bool directory, bool singleFileFallback = false)
     {
         if (!Directory.Exists(storeDir) || string.IsNullOrEmpty(name))
             return null;
@@ -166,8 +170,34 @@ internal static class ModFileOps
             }
         }
 
-        return Find(storeDir, name, directory);
+        if (Find(storeDir, name, directory) is { } extracted)
+            return extracted;
+
+        if (directory || !singleFileFallback)
+            return null;
+        var extension = Path.GetExtension(name);
+        if (extension.Length == 0)
+            return null;
+        var candidates = Directory
+            .EnumerateFiles(storeDir, "*" + extension, CaseInsensitive)
+            .Where(path => !IsInternal(storeDir, path))
+            .Take(2)
+            .ToList();
+        return candidates.Count == 1 ? candidates[0] : null;
     }
+
+    /// <summary>Player-supplied files rarely match the manifest's casing, and Linux file systems care.</summary>
+    private static readonly EnumerationOptions CaseInsensitive = new()
+    {
+        MatchCasing = MatchCasing.CaseInsensitive,
+        RecurseSubdirectories = true,
+        IgnoreInaccessible = true
+    };
+
+    /// <summary>Scratch folders the handlers create inside the store (<c>.staging</c>, <c>.dxvk-extract</c>).</summary>
+    private static bool IsInternal(string storeDir, string path) =>
+        Path.GetRelativePath(storeDir, path).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(part => part.StartsWith('.'));
 
     private static string? Find(string storeDir, string name, bool directory)
     {
@@ -176,9 +206,9 @@ internal static class ModFileOps
             return direct;
 
         var matches = directory
-            ? Directory.EnumerateDirectories(storeDir, name, SearchOption.AllDirectories)
-            : Directory.EnumerateFiles(storeDir, name, SearchOption.AllDirectories);
-        return matches.FirstOrDefault();
+            ? Directory.EnumerateDirectories(storeDir, name, CaseInsensitive)
+            : Directory.EnumerateFiles(storeDir, name, CaseInsensitive);
+        return matches.FirstOrDefault(path => !IsInternal(storeDir, path));
     }
 }
 
@@ -193,7 +223,7 @@ public sealed class MpqHandler : IModHandler
     public bool IsApplied(ModApplyContext ctx) => File.Exists(ctx.LivePath);
 
     public bool IsInstalled(ModApplyContext ctx) =>
-        IsApplied(ctx) || ModFileOps.ResolveStoreEntry(ctx.StoreDir, ctx.LiveName, directory: false) is not null;
+        IsApplied(ctx) || ModFileOps.ResolveStoreEntry(ctx.StoreDir, ctx.LiveName, directory: false, singleFileFallback: true) is not null;
 
     public Task<ModApplyOutcome> EnableAsync(ModApplyContext ctx, CancellationToken ct = default)
     {
@@ -201,7 +231,7 @@ public sealed class MpqHandler : IModHandler
         if (IsApplied(ctx) && IsCurrent(ctx))
             return Task.FromResult(ModApplyOutcome.NoChange($"{ctx.LiveName} is already in Data/."));
 
-        var source = ModFileOps.ResolveStoreEntry(ctx.StoreDir, ctx.LiveName, directory: false);
+        var source = ModFileOps.ResolveStoreEntry(ctx.StoreDir, ctx.LiveName, directory: false, singleFileFallback: true);
         if (source is null)
             return Task.FromResult(ModApplyOutcome.Skip($"{ctx.LiveName} is not present in mods/{ctx.Asset.Id}."));
         if (!IsPayloadValid(ctx, source))
@@ -258,13 +288,13 @@ public sealed class DllHandler : IModHandler
     public bool IsApplied(ModApplyContext ctx) => File.Exists(ctx.LivePath);
 
     public bool IsInstalled(ModApplyContext ctx) =>
-        IsApplied(ctx) || ModFileOps.ResolveStoreEntry(ctx.StoreDir, ctx.LiveName, directory: false) is not null;
+        IsApplied(ctx) || ModFileOps.ResolveStoreEntry(ctx.StoreDir, ctx.LiveName, directory: false, singleFileFallback: true) is not null;
 
     public Task<ModApplyOutcome> EnableAsync(ModApplyContext ctx, CancellationToken ct = default)
     {
         if (!IsApplied(ctx) || !IsCurrent(ctx))
         {
-            var source = ModFileOps.ResolveStoreEntry(ctx.StoreDir, ctx.LiveName, directory: false);
+            var source = ModFileOps.ResolveStoreEntry(ctx.StoreDir, ctx.LiveName, directory: false, singleFileFallback: true);
             if (source is null)
                 return Task.FromResult(ModApplyOutcome.Skip($"{ctx.LiveName} is not present in mods/{ctx.Asset.Id}."));
             if (!IsPayloadValid(ctx, source))
@@ -295,6 +325,13 @@ public sealed class DllHandler : IModHandler
         ModFileOps.MoveFile(ctx.LivePath, Path.Combine(ctx.StoreDir, ctx.LiveName));
         return Task.FromResult(ModApplyOutcome.Ok($"Disabled {ctx.LiveName}; moved to mods/{ctx.Asset.Id}."));
     }
+
+    /// <summary>
+    /// A DLL beside WoW.exe does nothing until VanillaFixes finds it in <c>dlls.txt</c>. A player who
+    /// copied the file in by hand usually skipped that step.
+    /// </summary>
+    public static bool IsRegistered(ModApplyContext ctx) =>
+        DllEntries(ctx).All(entry => DllsTxt.Contains(ctx.ClientDir, entry));
 
     private static IEnumerable<string> DllEntries(ModApplyContext ctx) =>
         ctx.Asset.DllsTxtAdd.Count > 0 ? ctx.Asset.DllsTxtAdd : [];
@@ -545,11 +582,14 @@ public sealed class ExecutablePatchHandler : IModHandler
 /// </summary>
 public sealed class ConfigurationHandler : IModHandler
 {
+    /// <summary>The manifest asset whose CVar values follow the launcher's memory dropdown.</summary>
+    public const string ScriptMemoryAssetId = "script_memory";
+
     public ModKind Kind => ModKind.Configuration;
 
     public bool IsApplied(ModApplyContext ctx)
     {
-        var wanted = ParseValues(ctx.Asset);
+        var wanted = WantedValues(ctx);
         if (wanted.Count == 0)
             return false;
         var current = ConfigWtf.Read(ConfigPath(ctx));
@@ -561,7 +601,7 @@ public sealed class ConfigurationHandler : IModHandler
 
     public Task<ModApplyOutcome> EnableAsync(ModApplyContext ctx, CancellationToken ct = default)
     {
-        var wanted = ParseValues(ctx.Asset);
+        var wanted = WantedValues(ctx);
         if (wanted.Count == 0)
             return Task.FromResult(ModApplyOutcome.Skip($"{ctx.Asset.Id} declares no configuration values."));
 
@@ -571,12 +611,28 @@ public sealed class ConfigurationHandler : IModHandler
 
     public Task<ModApplyOutcome> DisableAsync(ModApplyContext ctx, CancellationToken ct = default)
     {
-        var wanted = ParseValues(ctx.Asset);
+        var wanted = WantedValues(ctx);
         if (wanted.Count == 0)
             return Task.FromResult(ModApplyOutcome.NoChange("Nothing to remove."));
 
         ConfigWtf.Remove(ConfigPath(ctx), wanted.Keys);
         return Task.FromResult(ModApplyOutcome.Ok($"Removed {wanted.Count} Config.wtf value(s)."));
+    }
+
+    /// <summary>
+    /// The manifest pair, except for the Lua memory asset: there the launcher's memory selection
+    /// replaces both ceilings so the dropdown in the mods dialog is authoritative.
+    /// </summary>
+    private static Dictionary<string, string> WantedValues(ModApplyContext ctx)
+    {
+        var values = ParseValues(ctx.Asset);
+        if (string.Equals(ctx.Asset.Id, ScriptMemoryAssetId, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var pair in ScriptMemoryOptions.Values(ctx.State.Settings.ScriptMemoryMegabytes))
+                values[pair.Key] = pair.Value;
+        }
+
+        return values;
     }
 
     private static string ConfigPath(ModApplyContext ctx) =>

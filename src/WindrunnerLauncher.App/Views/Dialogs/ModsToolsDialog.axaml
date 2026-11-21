@@ -61,6 +61,20 @@
                                                Classes.danger="{Binding IsDisableAction}"
                                                Padding="8,4" />
                     </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowScriptMemoryOptions}">
+                      <TextBlock Text="Lua memory" Classes="muted" FontSize="12" VerticalAlignment="Center" />
+                      <ComboBox Height="30" Width="104" Padding="10,4" FontSize="12"
+                                ItemsSource="{Binding ScriptMemoryChoices}"
+                                SelectedItem="{Binding SelectedScriptMemory, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="vm:ScriptMemoryChoice">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                      <TextBlock Text="Applied the next time the game starts." Classes="muted" FontSize="11"
+                                 VerticalAlignment="Center" />
+                    </StackPanel>
                     <Button Content="VanillaTweaks options"
                             Classes="vanillatweaks-options"
                             IsVisible="{Binding IsVanillaTweaks}"

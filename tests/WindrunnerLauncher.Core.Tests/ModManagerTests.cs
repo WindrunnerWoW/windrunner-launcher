@@ -162,13 +162,16 @@ public class ModManagerTests
     {
         using var f = new Fixture();
         f.Payload("hd_patch_a", "patch-H.mpq");
-        f.Payload("vanilla_helpers", "patch-V.mpq");
+        f.Payload("vanilla_helpers", "VanillaHelpers.dll");
+        f.CacheVanillaFixes();
 
         await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_a", true);
 
         Assert.True(File.Exists(f.Live("Data", "patch-H.mpq")));
-        Assert.True(File.Exists(f.Live("Data", "patch-V.mpq")), "dependency is materialized too");
+        Assert.True(File.Exists(f.Live("VanillaHelpers.dll")), "dependency is materialized too");
+        Assert.True(DllsTxt.Contains(f.ClientDir, "VanillaHelpers.dll"));
         Assert.True(f.Realm.ManagedModState["vanilla_helpers"]);
+        Assert.True(f.Realm.ManagedModState["vanillafixes"], "VanillaHelpers is loaded by VanillaFixes");
     }
 
     [Fact]
@@ -176,16 +179,211 @@ public class ModManagerTests
     {
         using var f = new Fixture();
         f.Payload("hd_patch_a", "patch-H.mpq");
-        f.Payload("vanilla_helpers", "patch-V.mpq");
+        f.Payload("vanilla_helpers", "VanillaHelpers.dll");
+        f.CacheVanillaFixes();
         await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_a", true);
 
         await f.Mods.SetEnabledAsync(f.Realm, "vanilla_helpers", false);
 
         Assert.False(f.Realm.ManagedModState["hd_patch_a"]);
         Assert.False(File.Exists(f.Live("Data", "patch-H.mpq")));
-        Assert.False(File.Exists(f.Live("Data", "patch-V.mpq")));
+        Assert.False(File.Exists(f.Live("VanillaHelpers.dll")));
         Assert.True(File.Exists(Path.Combine(f.Paths.ModStore("hd_patch_a"), "patch-H.mpq")));
-        Assert.True(File.Exists(Path.Combine(f.Paths.ModStore("vanilla_helpers"), "patch-V.mpq")));
+        Assert.True(File.Exists(Path.Combine(f.Paths.ModStore("vanilla_helpers"), "VanillaHelpers.dll")));
+    }
+
+    [Fact]
+    public async Task Materialize_KeepsMpqThePlayerPlacedInData()
+    {
+        using var f = new Fixture();
+        File.WriteAllText(f.Live("Data", "patch-H.mpq"), "hand-installed");
+
+        await f.Mods.MaterializeAsync(f.Realm);
+
+        Assert.Equal("hand-installed", File.ReadAllText(f.Live("Data", "patch-H.mpq")));
+        Assert.False(Directory.Exists(f.Paths.ModStore("hd_patch_a")) &&
+                     Directory.EnumerateFiles(f.Paths.ModStore("hd_patch_a")).Any());
+        Assert.True(f.Realm.ManagedModState["hd_patch_a"], "adopted as enabled");
+        Assert.True(new StateStore(f.Paths).SelectedRealm().ManagedModState["hd_patch_a"], "adoption is saved");
+    }
+
+    [Fact]
+    public async Task Materialize_AdoptedAsset_IsDisabledOnlyWhenThePlayerAsks()
+    {
+        using var f = new Fixture();
+        File.WriteAllText(f.Live("Data", "patch-H.mpq"), "hand-installed");
+        var listed = f.Mods.ListItems(f.Realm).Single(i => i.Asset.Id == "hd_patch_a");
+        Assert.True(listed.Enabled);
+        Assert.True(listed.Installed);
+
+        await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_a", false);
+        Assert.False(File.Exists(f.Live("Data", "patch-H.mpq")));
+
+        // The player's choice now sticks: a later Play does not re-adopt or re-enable it.
+        await f.Mods.MaterializeAsync(f.Realm);
+        Assert.False(File.Exists(f.Live("Data", "patch-H.mpq")));
+        Assert.True(File.Exists(Path.Combine(f.Paths.ModStore("hd_patch_a"), "patch-H.mpq")));
+    }
+
+    [Fact]
+    public async Task Materialize_AdoptsForEveryRealmOnTheSameClient()
+    {
+        using var f = new Fixture();
+        var remote = new RealmEntry { Id = "remote", DisplayName = "Remote", Address = "x" };
+        f.State.Realms.Realms.Add(remote);
+        File.WriteAllText(f.Live("Data", "patch-H.mpq"), "hand-installed");
+
+        await f.Mods.MaterializeAsync(f.Realm);
+        await f.Mods.MaterializeAsync(remote);
+
+        Assert.True(File.Exists(f.Live("Data", "patch-H.mpq")), "switching realms does not pull it out");
+        Assert.True(remote.ManagedModState["hd_patch_a"]);
+    }
+
+    [Fact]
+    public async Task Materialize_RegistersHandPlacedDllInDllsTxt()
+    {
+        using var f = new Fixture();
+        f.CacheVanillaFixes();
+        File.WriteAllText(f.Live("VanillaHelpers.dll"), "dll");
+        Assert.False(DllsTxt.Contains(f.ClientDir, "VanillaHelpers.dll"));
+
+        await f.Mods.MaterializeAsync(f.Realm);
+
+        Assert.True(f.Realm.ManagedModState["vanilla_helpers"]);
+        Assert.True(File.Exists(f.Live("VanillaHelpers.dll")));
+        Assert.True(DllsTxt.Contains(f.ClientDir, "VanillaHelpers.dll"));
+    }
+
+    [Fact]
+    public async Task Enable_FindsPayloadDroppedIntoModsUnderAnotherName()
+    {
+        using var f = new Fixture();
+        f.Payload("raid_visuals", "Patch-O-RaidVisuals-v1.2.MPQ", "mpq-bytes");
+        Assert.True(f.Mods.IsInstalled(f.Realm, f.Mods.Find("raid_visuals")!));
+
+        await f.Mods.SetEnabledAsync(f.Realm, "raid_visuals", true);
+
+        Assert.Equal("mpq-bytes", File.ReadAllText(f.Live("Data", "patch-O.mpq")));
+    }
+
+    [Fact]
+    public void StoreFallback_IsAmbiguousWithTwoCandidates()
+    {
+        using var f = new Fixture();
+        f.Payload("raid_visuals", "one.mpq");
+        f.Payload("raid_visuals", "two.mpq");
+        Assert.False(f.Mods.IsInstalled(f.Realm, f.Mods.Find("raid_visuals")!));
+    }
+
+    [Fact]
+    public async Task Enable_DownloadsMissingDependencies()
+    {
+        var bytes = Encoding.UTF8.GetBytes("helper-dll");
+        var handler = new CountingHandler(bytes);
+        using var http = new HttpClient(handler);
+        using var f = new Fixture(paths =>
+        {
+            ManifestTestData.SaveClient(paths, new ClientManifest
+            {
+                Assets =
+                [
+                    new ManagedAsset
+                    {
+                        Id = "helpers", DisplayName = "Helpers", Kind = ModKind.Dll,
+                        Destination = "Helpers.dll", DownloadUrl = "https://example.test/Helpers.dll",
+                        DllsTxtAdd = ["Helpers.dll"]
+                    },
+                    new ManagedAsset
+                    {
+                        Id = "hd", DisplayName = "HD", Kind = ModKind.Mpq,
+                        Destination = "Data/patch-A.mpq", Dependencies = ["helpers"]
+                    }
+                ]
+            });
+        }, http);
+        f.Payload("hd", "patch-A.mpq");
+
+        await f.Mods.SetEnabledAsync(f.Realm, "hd", true);
+
+        Assert.Equal(1, handler.Calls);
+        Assert.True(File.Exists(f.Live("Data", "patch-A.mpq")));
+        Assert.Equal("helper-dll", File.ReadAllText(f.Live("Helpers.dll")));
+        Assert.True(DllsTxt.Contains(f.ClientDir, "Helpers.dll"));
+    }
+
+    private static ClientManifest HdSetManifest() => new()
+    {
+        Assets =
+        [
+            new ManagedAsset { Id = "hd_patch_a", Kind = ModKind.Mpq, Destination = "Data/patch-A.mpq" },
+            new ManagedAsset { Id = "hd_patch_b", Kind = ModKind.Mpq, Destination = "Data/patch-B.mpq", Dependencies = ["hd_patch_d", "hd_patch_e"] },
+            new ManagedAsset { Id = "hd_patch_d", Kind = ModKind.Mpq, Destination = "Data/patch-D.mpq", Dependencies = ["hd_patch_b", "hd_patch_e"] },
+            new ManagedAsset { Id = "hd_patch_e", Kind = ModKind.Mpq, Destination = "Data/patch-E.mpq", Dependencies = ["hd_patch_b", "hd_patch_d"] },
+            new ManagedAsset { Id = "hd_patch_g", Kind = ModKind.Mpq, Destination = "Data/patch-G.mpq" },
+            new ManagedAsset { Id = "hd_patch_t", Kind = ModKind.Mpq, Destination = "Data/patch-T.mpq", Dependencies = ["hd_patch_a", "hd_patch_g"] },
+            new ManagedAsset { Id = "hd_patch_u", Kind = ModKind.Mpq, Destination = "Data/patch-U.mpq", Dependencies = ["hd_patch_a", "hd_patch_g", "hd_patch_t"] }
+        ]
+    };
+
+    [Fact]
+    public async Task EnvironmentSet_IsEnabledAndDisabledTogether()
+    {
+        using var f = new Fixture(paths => ManifestTestData.SaveClient(paths, HdSetManifest()));
+        foreach (var letter in new[] { "b", "d", "e" })
+            f.Payload("hd_patch_" + letter, $"patch-{letter.ToUpperInvariant()}.mpq");
+
+        await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_d", true);
+        Assert.True(File.Exists(f.Live("Data", "patch-B.mpq")));
+        Assert.True(File.Exists(f.Live("Data", "patch-D.mpq")));
+        Assert.True(File.Exists(f.Live("Data", "patch-E.mpq")));
+
+        await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_e", false);
+        Assert.False(File.Exists(f.Live("Data", "patch-B.mpq")));
+        Assert.False(File.Exists(f.Live("Data", "patch-D.mpq")));
+        Assert.False(File.Exists(f.Live("Data", "patch-E.mpq")));
+    }
+
+    [Fact]
+    public async Task Disable_CascadesThroughTransitiveDependents()
+    {
+        using var f = new Fixture(paths => ManifestTestData.SaveClient(paths, HdSetManifest()));
+        foreach (var letter in new[] { "a", "g", "t", "u" })
+            f.Payload("hd_patch_" + letter, $"patch-{letter.ToUpperInvariant()}.mpq");
+
+        await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_u", true);
+        Assert.True(File.Exists(f.Live("Data", "patch-U.mpq")));
+        Assert.True(f.Realm.ManagedModState["hd_patch_t"]);
+
+        await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_g", false);
+        Assert.False(f.Realm.ManagedModState["hd_patch_t"]);
+        Assert.False(f.Realm.ManagedModState["hd_patch_u"]);
+        Assert.False(File.Exists(f.Live("Data", "patch-U.mpq")));
+        Assert.True(File.Exists(f.Live("Data", "patch-A.mpq")), "unrelated base layer stays");
+    }
+
+    [Fact]
+    public async Task Enable_MissingDependencyWithoutSource_NamesTheFileAndFolder()
+    {
+        using var f = new Fixture(paths =>
+        {
+            ManifestTestData.SaveClient(paths, new ClientManifest
+            {
+                Assets =
+                [
+                    new ManagedAsset { Id = "helpers", DisplayName = "Helpers", Kind = ModKind.Dll, Destination = "Helpers.dll" },
+                    new ManagedAsset { Id = "hd", DisplayName = "HD", Kind = ModKind.Mpq, Destination = "Data/patch-A.mpq", Dependencies = ["helpers"] }
+                ]
+            });
+        });
+        f.Payload("hd", "patch-A.mpq");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => f.Mods.SetEnabledAsync(f.Realm, "hd", true));
+
+        Assert.Contains("Helpers.dll", ex.Message);
+        Assert.Contains("mods/helpers", ex.Message);
+        Assert.False(File.Exists(f.Live("Data", "patch-A.mpq")));
+        Assert.False(f.Realm.ManagedModState.ContainsKey("hd"));
     }
 
     [Fact]
@@ -230,10 +428,6 @@ public class ModManagerTests
                 ]
             });
         }, http);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            f.Mods.SetEnabledAsync(f.Realm, "offline_mod", true));
-        Assert.Equal(0, handler.Calls);
 
         await f.Mods.DownloadAssetAsync(f.Realm, "offline_mod");
         Assert.Equal(1, handler.Calls);
@@ -359,6 +553,44 @@ public class ModManagerTests
         values = Client.ConfigWtf.Read(config);
         Assert.False(values.ContainsKey("scriptMemory"));
         Assert.Equal("enUS", values["locale"]);
+    }
+
+    [Fact]
+    public async Task Configuration_ScriptMemoryPreset_ScalesBothCeilings()
+    {
+        using var f = new Fixture();
+        var config = f.Live("WTF", "Config.wtf");
+        Directory.CreateDirectory(Path.GetDirectoryName(config)!);
+        File.WriteAllText(config, "SET locale \"enUS\"\n");
+
+        f.State.Settings.ScriptMemoryMegabytes = 256;
+        await f.Mods.SetEnabledAsync(f.Realm, "script_memory", true);
+
+        var values = Client.ConfigWtf.Read(config);
+        Assert.Equal("262144", values["scriptMemory"]);
+        Assert.Equal("262144", values["maxAddOnMemory"]);
+        Assert.Equal("enUS", values["locale"]);
+
+        f.State.Settings.ScriptMemoryMegabytes = 512;
+        await f.Mods.MaterializeAsync(f.Realm);
+
+        values = Client.ConfigWtf.Read(config);
+        Assert.Equal("524288", values["scriptMemory"]);
+        Assert.Equal("524288", values["maxAddOnMemory"]);
+        Assert.Equal("enUS", values["locale"]);
+    }
+
+    [Theory]
+    [InlineData(16, "16384", "131072")]
+    [InlineData(128, "131072", "131072")]
+    [InlineData(256, "262144", "262144")]
+    [InlineData(512, "524288", "524288")]
+    [InlineData(999, "16384", "131072")]
+    public void ScriptMemoryOptions_MapMegabytesToKilobytes(int megabytes, string scriptMemory, string maxAddOnMemory)
+    {
+        var values = ScriptMemoryOptions.Values(megabytes);
+        Assert.Equal(scriptMemory, values["scriptMemory"]);
+        Assert.Equal(maxAddOnMemory, values["maxAddOnMemory"]);
     }
 
     [Fact]
