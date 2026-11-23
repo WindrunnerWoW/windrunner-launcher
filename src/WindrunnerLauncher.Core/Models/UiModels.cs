@@ -14,6 +14,9 @@ public sealed class ModListItem
     public bool Installed { get; set; }
     public bool UpdateAvailable { get; set; }
     public bool Unmanaged { get; set; }
+
+    /// <summary>Display name of the asset this one is a companion of, when it cannot be toggled on its own.</summary>
+    public string? CompanionOf { get; set; }
 }
 
 public sealed class ClientMpqItem

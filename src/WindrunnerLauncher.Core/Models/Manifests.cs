@@ -46,7 +46,21 @@ public sealed class ManagedAsset
     public string? DownloadUrl { get; set; }
     public string? AssetContains { get; set; }
     public string? GitHubRepo { get; set; }
+
+    /// <summary>
+    /// Release tag to read from <see cref="GitHubRepo"/> instead of its latest release. Used by
+    /// assets that are published as their own tagged release, such as the HD patch overlays.
+    /// </summary>
+    public string? ReleaseTag { get; set; }
+
     public List<string> Dependencies { get; set; } = [];
+
+    /// <summary>
+    /// Assets enabled and disabled together with this one. A companion is downloaded when this
+    /// asset is enabled, and cannot be toggled on its own.
+    /// </summary>
+    public List<string> Companions { get; set; } = [];
+
     public List<string> Conflicts { get; set; } = [];
     public List<string> DllsTxtAdd { get; set; } = [];
     public bool Recommended { get; set; }

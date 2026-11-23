@@ -32,17 +32,30 @@ public sealed class ReleaseCatalog
         if (!TryParse(asset.GitHubRepo, out var host, out var ownerRepo))
             throw new InvalidOperationException($"{Display(asset)} has an invalid repository '{asset.GitHubRepo}'.");
 
-        var release = await LatestAsync(host, ownerRepo, ct).ConfigureAwait(false);
+        var release = await ReleaseAsync(host, ownerRepo, asset.ReleaseTag, ct).ConfigureAwait(false);
         if (release is null)
-            throw new InvalidOperationException($"Could not read the latest release of {asset.GitHubRepo}.");
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(asset.ReleaseTag)
+                ? $"Could not read the latest release of {asset.GitHubRepo}."
+                : $"Could not read the '{asset.ReleaseTag}' release of {asset.GitHubRepo}.");
 
         var picked = ModReleaseSelector.Select(release, asset);
         if (picked is null || string.IsNullOrWhiteSpace(picked.BrowserDownloadUrl))
             throw new InvalidOperationException(
-                $"The latest release of {asset.GitHubRepo} has no matching Windows download for {Display(asset)}.");
+                $"The released files of {asset.GitHubRepo} have no matching Windows download for {Display(asset)}.");
 
         return picked.BrowserDownloadUrl;
     }
+
+    /// <summary>Reads the requested tag when the asset names one, otherwise the latest release.</summary>
+    private Task<GitHubRelease?> ReleaseAsync(string host, string ownerRepo, string? tag, CancellationToken ct) =>
+        string.IsNullOrWhiteSpace(tag)
+            ? LatestAsync(host, ownerRepo, ct)
+            : TagAsync(host, ownerRepo, tag.Trim(), ct);
+
+    private Task<GitHubRelease?> TagAsync(string host, string ownerRepo, string tag, CancellationToken ct) =>
+        host.Equals("codeberg.org", StringComparison.OrdinalIgnoreCase)
+            ? TagCodebergAsync(ownerRepo, tag, ct)
+            : _github.TagAsync(ownerRepo, tag, ct);
 
     public Task<GitHubRelease?> FetchLatestAsync(string host, string ownerRepo, CancellationToken ct = default) =>
         LatestAsync(host, ownerRepo, ct);
@@ -127,6 +140,20 @@ public sealed class ReleaseCatalog
         }
 
         return null;
+    }
+
+    private async Task<GitHubRelease?> TagCodebergAsync(string ownerRepo, string tag, CancellationToken ct)
+    {
+        var url = $"https://codeberg.org/api/v1/repos/{ownerRepo}/releases/tags/{Uri.EscapeDataString(tag)}";
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.Accept.ParseAdd("application/json");
+        using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+            return null;
+
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+        return doc.RootElement.ValueKind == JsonValueKind.Object ? ParseCodeberg(doc.RootElement) : null;
     }
 
     private static GitHubRelease ParseCodeberg(JsonElement item)

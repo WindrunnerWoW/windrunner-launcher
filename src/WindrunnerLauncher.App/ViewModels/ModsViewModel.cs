@@ -353,6 +353,7 @@ public sealed partial class ModItemViewModel : ObservableObject
         Required = row.Asset.Required;
         Supported = ModHandlers.IsSupported(row.Asset.Kind);
         Installed = row.Installed;
+        CompanionOf = row.CompanionOf;
         HasDownloadSource = Supported && ModManager.HasDownloadSource(row.Asset);
         ManualInstallHint = ModManager.ManualInstallHint(row.Asset);
         _enabled = row.Enabled;
@@ -388,16 +389,19 @@ public sealed partial class ModItemViewModel : ObservableObject
     public bool Installed { get; }
     public bool HasDownloadSource { get; }
     public string ManualInstallHint { get; }
+    public string? CompanionOf { get; }
+    public bool IsCompanion => CompanionOf is not null;
     public bool CanDownload => !Unmanaged && !Installed && HasDownloadSource;
-    public bool CanToggle => Supported && !Unmanaged && !Required && (Enabled || Installed);
-    public string KindLabel => Unmanaged ? "UNMANAGED" : Required ? "REQUIRED" : "OPTIONAL";
-    public string ToggleLabel => Enabled ? "Disable" : "Enable";
+    public bool CanToggle => Supported && !Unmanaged && !Required && !IsCompanion && (Enabled || Installed);
+    public string KindLabel => Unmanaged ? "UNMANAGED" : IsCompanion ? "AUTO" : Required ? "REQUIRED" : "OPTIONAL";
+    public string ToggleLabel => IsCompanion ? (Enabled ? "On" : "Auto") : Enabled ? "Disable" : "Enable";
     public string DownloadLabel => Installed ? "Cached" : "Download";
     public bool IsEnableAction => CanToggle && !Enabled;
     public bool IsDisableAction => CanToggle && Enabled;
     public bool IsDownloadAction => CanDownload;
     public string AvailabilityLabel => Unmanaged ? "Unmanaged file"
         : !Supported ? "Not supported yet"
+        : IsCompanion ? (Enabled ? $"Enabled with {CompanionOf}" : $"Enabled automatically with {CompanionOf}")
         : Enabled && Installed ? "Enabled"
         : Installed ? HasDownloadSource ? "Cached for offline use" : "Ready"
         : HasDownloadSource ? "Download before enabling" : ManualInstallHint;
