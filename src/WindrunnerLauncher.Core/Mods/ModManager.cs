@@ -87,6 +87,7 @@ public sealed class ModManager : IManagedAssetRepairer
             }
             else if (TryParse(envelope.PayloadJson) is { } signed)
             {
+                BuiltInCompanions.Apply(signed);
                 _manifest = signed;
                 ManifestSource = new ModManifestSource
                 {
@@ -192,24 +193,31 @@ public sealed class ModManager : IManagedAssetRepairer
         return asset is not null && ModHandlers.IsSupported(asset.Kind) && IsApplied(realm, asset);
     }
 
-    public int EnabledCountFor(RealmEntry realm) =>
-        _manifest.Assets.Count(a => ModHandlers.IsSupported(a.Kind) && DesiredState(realm, a));
+    public int EnabledCountFor(RealmEntry realm)
+    {
+        var desired = ResolveDesiredState(realm);
+        return _manifest.Assets.Count(a => ModHandlers.IsSupported(a.Kind) && desired.TryGetValue(a.Id, out var on) && on);
+    }
 
     public List<ModListItem> ListItems(RealmEntry realm)
     {
         AdoptUserInstalled(realm);
+        var desired = ResolveDesiredState(realm);
         var items = new List<ModListItem>(_manifest.Assets.Count);
         foreach (var asset in _manifest.Assets)
         {
             var ctx = BuildContext(realm, asset);
             var handler = ModHandlers.For(asset.Kind);
             var applied = handler.IsApplied(ctx);
+            var owner = _manifest.Assets.FirstOrDefault(a =>
+                a.Companions.Any(id => id.Equals(asset.Id, StringComparison.OrdinalIgnoreCase)));
             items.Add(new ModListItem
             {
                 Asset = asset,
-                Enabled = DesiredState(realm, asset),
+                Enabled = desired.TryGetValue(asset.Id, out var wanted) && wanted,
                 Installed = applied || handler.IsInstalled(ctx),
-                UpdateAvailable = applied && !ChecksumMatches(ctx, asset)
+                UpdateAvailable = applied && !ChecksumMatches(ctx, asset),
+                CompanionOf = owner is null ? null : Display(owner)
             });
         }
 
@@ -451,14 +459,14 @@ public sealed class ModManager : IManagedAssetRepairer
     }
 
     /// <summary>
-    /// Makes the asset and every dependency available offline: whatever is missing and has a
-    /// download source is fetched now; anything missing without one is reported, with the file
-    /// the player has to supply and where it goes.
+    /// Makes the asset, its companions and every dependency available offline: whatever is
+    /// missing and has a download source is fetched now; anything missing without one is
+    /// reported, with the file the player has to supply and where it goes.
     /// </summary>
     private async Task EnsureAvailableAsync(RealmEntry realm, ManagedAsset asset, CancellationToken ct)
     {
         var missing = new List<ManagedAsset>();
-        foreach (var current in Closure(asset))
+        foreach (var current in EnableClosure(asset))
         {
             ct.ThrowIfCancellationRequested();
             if (!ModHandlers.IsSupported(current.Kind))
@@ -488,7 +496,15 @@ public sealed class ModManager : IManagedAssetRepairer
     }
 
     /// <summary>The asset followed by its transitive dependencies, dependencies first.</summary>
-    private List<ManagedAsset> Closure(ManagedAsset asset)
+    private List<ManagedAsset> Closure(ManagedAsset asset) => Walk(asset, includeCompanions: false);
+
+    /// <summary>
+    /// The asset, the companions it carries and every dependency of those, dependencies first.
+    /// This is what an enable has to have offline before it can be applied.
+    /// </summary>
+    private List<ManagedAsset> EnableClosure(ManagedAsset asset) => Walk(asset, includeCompanions: true);
+
+    private List<ManagedAsset> Walk(ManagedAsset asset, bool includeCompanions)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var ordered = new List<ManagedAsset>();
@@ -504,8 +520,45 @@ public sealed class ModManager : IManagedAssetRepairer
                 if (Find(dependencyId) is { } dependency)
                     Visit(dependency);
             }
+            if (includeCompanions)
+            {
+                foreach (var companionId in current.Companions)
+                {
+                    if (Find(companionId) is { } companion)
+                        Visit(companion);
+                }
+            }
             ordered.Add(current);
         }
+    }
+
+    /// <summary>
+    /// The asset itself plus every non-required asset that has to follow it when it goes off:
+    /// its transitive dependents and the companions carried by any of them.
+    /// </summary>
+    private HashSet<string> AssetsFollowing(ManagedAsset asset)
+    {
+        var following = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { asset.Id };
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (var candidate in _manifest.Assets)
+            {
+                if (candidate.Required || following.Contains(candidate.Id))
+                    continue;
+
+                var dependsOnFollowing = candidate.Dependencies.Any(following.Contains);
+                var carriedByFollowing = _manifest.Assets.Any(owner =>
+                    following.Contains(owner.Id)
+                    && owner.Companions.Any(id => id.Equals(candidate.Id, StringComparison.OrdinalIgnoreCase)));
+
+                if ((dependsOnFollowing || carriedByFollowing) && following.Add(candidate.Id))
+                    changed = true;
+            }
+        }
+
+        return following;
     }
 
     private static string ExpectedPayload(ManagedAsset asset) => asset.Kind switch
@@ -582,8 +635,9 @@ public sealed class ModManager : IManagedAssetRepairer
 
         if (enabled)
         {
-            // Transitively: an HD patch needs VanillaHelpers, which needs VanillaFixes to load it.
-            foreach (var dep in Closure(asset))
+            // Transitively: an HD patch needs VanillaHelpers, which needs VanillaFixes to load it,
+            // and its compatibility overlay travels with it.
+            foreach (var dep in EnableClosure(asset))
             {
                 if (!ReferenceEquals(dep, asset) && !DesiredState(realm, dep))
                     realm.ManagedModState[dep.Id] = true;
@@ -601,8 +655,9 @@ public sealed class ModManager : IManagedAssetRepairer
         {
             // Anything that depends on this asset, directly or through another asset (Ultra HD
             // needs HD Character Textures, which needs HD Characters), can no longer stay enabled.
-            foreach (var dependent in _manifest.Assets.Where(a => !a.Required && DependsOn(a, asset.Id)))
-                realm.ManagedModState[dependent.Id] = false;
+            // Companions travelling with any asset that goes off follow it as well.
+            foreach (var id in AssetsFollowing(asset))
+                realm.ManagedModState[id] = false;
         }
 
         _state.SaveRealms();
@@ -905,7 +960,90 @@ public sealed class ModManager : IManagedAssetRepairer
             }
         }
 
+        ResolveCompanions(desired);
         return desired;
+    }
+
+    /// <summary>
+    /// Makes companions follow the asset that carries them. Turning an owner off switches its
+    /// companions off as well; turning it on brings them along. Anything that needs an asset
+    /// which ended up off cannot stay enabled, so the two cannot drift apart across Play.
+    /// </summary>
+    private void ResolveCompanions(Dictionary<string, bool> desired)
+    {
+        for (var pass = 0; pass <= _manifest.Assets.Count; pass++)
+        {
+            // A companion whose owner is off is off, even if the realm stored an explicit "on".
+            var forcedOff = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var owner in _manifest.Assets)
+            {
+                if (desired[owner.Id])
+                    continue;
+                foreach (var companionId in owner.Companions)
+                {
+                    if (desired.ContainsKey(companionId))
+                        forcedOff.Add(companionId);
+                }
+            }
+
+            var changed = false;
+            foreach (var companionId in forcedOff)
+            {
+                if (desired[companionId])
+                {
+                    desired[companionId] = false;
+                    changed = true;
+                }
+            }
+
+            // Enabling an owner enables its companions, including the payloads they need.
+            var pulledIn = new List<ManagedAsset>();
+            foreach (var asset in _manifest.Assets)
+            {
+                if (!desired[asset.Id])
+                    continue;
+                foreach (var companionId in asset.Companions)
+                {
+                    if (forcedOff.Contains(companionId)
+                        || !desired.TryGetValue(companionId, out var on) || on)
+                        continue;
+                    desired[companionId] = true;
+                    changed = true;
+                    if (Find(companionId) is { } companion)
+                        pulledIn.Add(companion);
+                }
+            }
+
+            foreach (var companion in pulledIn)
+            {
+                foreach (var dependency in Closure(companion))
+                {
+                    if (!forcedOff.Contains(dependency.Id)
+                        && desired.TryGetValue(dependency.Id, out var on) && !on)
+                    {
+                        desired[dependency.Id] = true;
+                        changed = true;
+                    }
+                }
+            }
+
+            // An asset whose dependency or companion is off cannot stay on. Required assets are
+            // always on, so they are never dropped here.
+            foreach (var asset in _manifest.Assets)
+            {
+                if (!desired[asset.Id] || asset.Required)
+                    continue;
+                if (asset.Dependencies.Concat(asset.Companions)
+                    .Any(id => desired.TryGetValue(id, out var on) && !on))
+                {
+                    desired[asset.Id] = false;
+                    changed = true;
+                }
+            }
+
+            if (!changed)
+                return;
+        }
     }
 
     /// <summary>

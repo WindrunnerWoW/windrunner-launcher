@@ -203,3 +203,14 @@ public static class TestData
         return data;
     }
 }
+
+/// <summary>Points every request at a loopback server while keeping its path and query.</summary>
+internal sealed class LoopbackRewriteHandler(string baseUrl) : DelegatingHandler(new HttpClientHandler())
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var original = request.RequestUri!;
+        request.RequestUri = new Uri(new Uri(baseUrl), original.PathAndQuery.TrimStart('/'));
+        return base.SendAsync(request, cancellationToken);
+    }
+}

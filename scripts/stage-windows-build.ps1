@@ -44,9 +44,6 @@ if (-not $exe) {
     throw "WindrunnerLauncher.exe was not produced in $SourceDir"
 }
 
-if (Test-Path $OutDir) {
-    Remove-Item -Recurse -Force $OutDir
-}
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
 # The exe embeds Skia/ANGLE and unpacks them beside itself on first run. Stage

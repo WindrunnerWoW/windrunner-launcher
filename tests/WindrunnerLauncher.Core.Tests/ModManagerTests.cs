@@ -19,7 +19,7 @@ public class ModManagerTests
         public RealmEntry Realm => State.SelectedRealm();
         public string ClientDir => Paths.Client;
 
-        public Fixture(Action<LauncherPaths>? beforeLoad = null, HttpClient? http = null, bool seedTestCatalog = true)
+        public Fixture(Action<LauncherPaths>? beforeLoad = null, HttpClient? http = null, bool seedTestCatalog = true, ReleaseCatalog? releases = null)
         {
             Paths = Tmp.Paths();
             Paths.EnsureLayout();
@@ -30,7 +30,7 @@ public class ModManagerTests
             Downloads = new DownloadManager(http);
             File.WriteAllText(Path.Combine(Paths.Client, "WoW.exe"), "MZ");
             Directory.CreateDirectory(Path.Combine(Paths.Client, "Data"));
-            Mods = new ModManager(Paths, State, Downloads);
+            Mods = new ModManager(Paths, State, Downloads, releases);
         }
 
         public string Payload(string assetId, string fileName, string contents = "payload")
@@ -162,14 +162,17 @@ public class ModManagerTests
     {
         using var f = new Fixture();
         f.Payload("hd_patch_a", "patch-H.mpq");
+        f.Payload("patch-a-compat", "patch-X.mpq");
         f.Payload("vanilla_helpers", "VanillaHelpers.dll");
         f.CacheVanillaFixes();
 
         await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_a", true);
 
         Assert.True(File.Exists(f.Live("Data", "patch-H.mpq")));
+        Assert.True(File.Exists(f.Live("Data", "patch-X.mpq")), "the HD Patch A overlay comes along");
         Assert.True(File.Exists(f.Live("VanillaHelpers.dll")), "dependency is materialized too");
         Assert.True(DllsTxt.Contains(f.ClientDir, "VanillaHelpers.dll"));
+        Assert.True(f.Realm.ManagedModState["patch-a-compat"]);
         Assert.True(f.Realm.ManagedModState["vanilla_helpers"]);
         Assert.True(f.Realm.ManagedModState["vanillafixes"], "VanillaHelpers is loaded by VanillaFixes");
     }
@@ -179,6 +182,7 @@ public class ModManagerTests
     {
         using var f = new Fixture();
         f.Payload("hd_patch_a", "patch-H.mpq");
+        f.Payload("patch-a-compat", "patch-X.mpq");
         f.Payload("vanilla_helpers", "VanillaHelpers.dll");
         f.CacheVanillaFixes();
         await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_a", true);
@@ -186,9 +190,12 @@ public class ModManagerTests
         await f.Mods.SetEnabledAsync(f.Realm, "vanilla_helpers", false);
 
         Assert.False(f.Realm.ManagedModState["hd_patch_a"]);
+        Assert.False(f.Realm.ManagedModState["patch-a-compat"]);
         Assert.False(File.Exists(f.Live("Data", "patch-H.mpq")));
+        Assert.False(File.Exists(f.Live("Data", "patch-X.mpq")));
         Assert.False(File.Exists(f.Live("VanillaHelpers.dll")));
         Assert.True(File.Exists(Path.Combine(f.Paths.ModStore("hd_patch_a"), "patch-H.mpq")));
+        Assert.True(File.Exists(Path.Combine(f.Paths.ModStore("patch-a-compat"), "patch-X.mpq")));
         Assert.True(File.Exists(Path.Combine(f.Paths.ModStore("vanilla_helpers"), "VanillaHelpers.dll")));
     }
 
@@ -312,6 +319,85 @@ public class ModManagerTests
         Assert.True(DllsTxt.Contains(f.ClientDir, "Helpers.dll"));
     }
 
+    [Fact]
+    public void Manifest_AddsHdPatchACompatFromItsTaggedRelease()
+    {
+        using var f = new Fixture();
+        var compat = f.Mods.Find("patch-a-compat");
+
+        Assert.NotNull(compat);
+        Assert.Equal(ModKind.Mpq, compat!.Kind);
+        Assert.Equal("Data/patch-X.mpq", compat.Destination);
+        Assert.Equal("WindrunnerWoW/windrunner-wow", compat.GitHubRepo);
+        Assert.Equal("patch-a-compat", compat.ReleaseTag);
+        Assert.Contains("patch-a-compat", f.Mods.Find("hd_patch_a")!.Companions);
+    }
+
+    [Fact]
+    public void ResolveDesiredState_CompanionFollowsItsOwner()
+    {
+        using var f = new Fixture();
+        var realm = new RealmEntry { Id = "r" };
+
+        realm.ManagedModState["hd_patch_a"] = true;
+        var desired = f.Mods.ResolveDesiredState(realm);
+        Assert.True(desired["hd_patch_a"]);
+        Assert.True(desired["patch-a-compat"], "the overlay is on with HD Patch A");
+
+        realm.ManagedModState["hd_patch_a"] = false;
+        realm.ManagedModState["patch-a-compat"] = true;
+        desired = f.Mods.ResolveDesiredState(realm);
+        Assert.False(desired["hd_patch_a"]);
+        Assert.False(desired["patch-a-compat"], "the overlay cannot stay on without HD Patch A");
+    }
+
+    [Fact]
+    public async Task Enable_HdPatchA_DownloadsCompatFromItsTaggedRelease()
+    {
+        var bytes = Encoding.UTF8.GetBytes("compat-mpq");
+        var requested = new List<string>();
+        using var server = new LoopbackHttpServer((ctx, _) =>
+        {
+            var path = ctx.Request.Url!.AbsolutePath;
+            requested.Add(path);
+            if (path.Equals("/repos/WindrunnerWoW/windrunner-wow/releases/tags/patch-a-compat", StringComparison.Ordinal))
+            {
+                var origin = $"{ctx.Request.Url.Scheme}://{ctx.Request.Url.Authority}";
+                var json = $$"""
+                    {
+                      "tag_name": "patch-a-compat",
+                      "assets": [
+                        { "name": "patch-X.mpq", "browser_download_url": "{{origin}}/patch-X.mpq", "size": {{bytes.Length}} }
+                      ]
+                    }
+                    """;
+                ctx.Response.ContentType = "application/json";
+                return LoopbackHttpServer.WriteAsync(ctx, Encoding.UTF8.GetBytes(json));
+            }
+
+            if (path.EndsWith("/patch-X.mpq", StringComparison.Ordinal))
+                return LoopbackHttpServer.WriteAsync(ctx, bytes);
+            return LoopbackHttpServer.WriteAsync(ctx, [], status: 404);
+        });
+        using var http = new HttpClient(new LoopbackRewriteHandler(server.BaseUrl));
+        using var f = new Fixture(http: http, releases: new ReleaseCatalog(http));
+        f.Payload("hd_patch_a", "patch-H.mpq");
+        f.Payload("vanilla_helpers", "VanillaHelpers.dll");
+        f.CacheVanillaFixes();
+
+        await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_a", true);
+
+        Assert.Contains(requested, path => path.EndsWith("/releases/tags/patch-a-compat", StringComparison.Ordinal));
+        Assert.Equal("compat-mpq", File.ReadAllText(f.Live("Data", "patch-X.mpq")));
+        Assert.True(f.Realm.ManagedModState["patch-a-compat"]);
+
+        await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_a", false);
+
+        Assert.False(File.Exists(f.Live("Data", "patch-X.mpq")));
+        Assert.True(File.Exists(Path.Combine(f.Paths.ModStore("patch-a-compat"), "patch-X.mpq")));
+        Assert.False(f.Realm.ManagedModState["patch-a-compat"]);
+    }
+
     private static ClientManifest HdSetManifest() => new()
     {
         Assets =
@@ -350,6 +436,7 @@ public class ModManagerTests
         using var f = new Fixture(paths => ManifestTestData.SaveClient(paths, HdSetManifest()));
         foreach (var letter in new[] { "a", "g", "t", "u" })
             f.Payload("hd_patch_" + letter, $"patch-{letter.ToUpperInvariant()}.mpq");
+        f.Payload("patch-a-compat", "patch-X.mpq");
 
         await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_u", true);
         Assert.True(File.Exists(f.Live("Data", "patch-U.mpq")));
