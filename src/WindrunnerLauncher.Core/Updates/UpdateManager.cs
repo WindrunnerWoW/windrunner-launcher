@@ -968,6 +968,9 @@ public sealed class UpdateManager
         if (string.IsNullOrWhiteSpace(current))
             return true;
 
+        candidate = NormalizeDottedHotfix(candidate);
+        current = NormalizeDottedHotfix(current);
+
         if (TryParseVersion(candidate, out var left) && TryParseVersion(current, out var right))
         {
             var baseComparison = left.CompareTo(right);
@@ -978,6 +981,20 @@ public sealed class UpdateManager
         }
 
         return !string.Equals(candidate.Trim(), current.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Treats a four-part version such as <c>1.19.0.1</c> (a hotfix tag mistyped with a dot) like
+    /// <c>1.19.0-1</c>, so it compares correctly against dash-style hotfix tags.
+    /// </summary>
+    private static string NormalizeDottedHotfix(string text)
+    {
+        var trimmed = text.Trim();
+        var body = trimmed.TrimStart('v', 'V');
+        var lastDot = body.LastIndexOf('.');
+        if (lastDot <= 0 || body.Count(c => c == '.') != 3 || !body.All(c => char.IsAsciiDigit(c) || c == '.'))
+            return text;
+        return body[..lastDot] + "-" + body[(lastDot + 1)..];
     }
 
     private static bool TryParseVersion(string text, out Version version)

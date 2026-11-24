@@ -39,6 +39,10 @@ public class UpdateManagerTests
     [InlineData("1.19.0-1", "1.19.0", true)]
     [InlineData("1.19.0", "1.19.0-1", false)]
     [InlineData("1.19.0-ptr.1", "1.18.3-2", true)]
+    [InlineData("1.19.0-2", "1.19.0.1", true)]
+    [InlineData("1.19.0-1", "1.19.0.1", false)]
+    [InlineData("1.19.0.1", "1.19.0", true)]
+    [InlineData("1.19.1", "1.19.0.1", true)]
     public void IsNewer(string candidate, string current, bool expected)
     {
         Assert.Equal(expected, UpdateManager.IsNewer(candidate, current));
