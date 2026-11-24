@@ -413,6 +413,110 @@ public class ModManagerTests
     };
 
     [Fact]
+    public void Manifest_LinksCompatToEveryHdPatchThatNeedsIt()
+    {
+        var manifest = HdSetManifest();
+        manifest.Assets.Add(new ManagedAsset { Id = "hd_patch_c", Kind = ModKind.Mpq, Destination = "Data/patch-C.mpq" });
+        BuiltInCompanions.Apply(manifest);
+
+        foreach (var id in new[] { "hd_patch_a", "hd_patch_g", "hd_patch_c" })
+            Assert.Contains("patch-a-compat", manifest.Assets.Single(a => a.Id == id).Companions);
+        Assert.DoesNotContain("patch-a-compat", manifest.Assets.Single(a => a.Id == "hd_patch_b").Companions);
+
+        var a = manifest.Assets.Single(x => x.Id == "hd_patch_a");
+        Assert.Contains("hd_patch_g", a.Dependencies);
+        Assert.Contains("hd_patch_c", a.Dependencies);
+        Assert.DoesNotContain("hd_patch_a", a.Dependencies);
+        Assert.DoesNotContain("hd_patch_a", manifest.Assets.Single(x => x.Id == "hd_patch_b").Dependencies);
+    }
+
+    [Fact]
+    public void ResolveDesiredState_HdPatchesAndCompatSwitchTogether()
+    {
+        using var f = new Fixture(paths => ManifestTestData.SaveClient(paths, HdSetManifest()));
+        var realm = new RealmEntry { Id = "r" };
+
+        realm.ManagedModState["hd_patch_g"] = true;
+        var desired = f.Mods.ResolveDesiredState(realm);
+        Assert.True(desired["hd_patch_a"], "G needs A");
+        Assert.True(desired["patch-a-compat"], "and the compat patch");
+
+        realm.ManagedModState["hd_patch_a"] = false;
+        realm.ManagedModState["hd_patch_g"] = false;
+        desired = f.Mods.ResolveDesiredState(realm);
+        Assert.False(desired["patch-a-compat"], "nothing needs it any more");
+    }
+
+    [Fact]
+    public async Task Toggle_OneHdPatch_SwitchesTheOthersAndCompat()
+    {
+        var bytes = Encoding.UTF8.GetBytes("compat-mpq");
+        using var server = new LoopbackHttpServer((ctx, _) =>
+        {
+            var path = ctx.Request.Url!.AbsolutePath;
+            if (path.EndsWith("/releases/tags/patch-a-compat", StringComparison.Ordinal))
+            {
+                var origin = $"{ctx.Request.Url.Scheme}://{ctx.Request.Url.Authority}";
+                var json = $$"""
+                    { "tag_name": "patch-a-compat", "assets": [ { "name": "patch-X.mpq", "browser_download_url": "{{origin}}/patch-X.mpq", "size": {{bytes.Length}} } ] }
+                    """;
+                ctx.Response.ContentType = "application/json";
+                return LoopbackHttpServer.WriteAsync(ctx, Encoding.UTF8.GetBytes(json));
+            }
+
+            return path.EndsWith("/patch-X.mpq", StringComparison.Ordinal)
+                ? LoopbackHttpServer.WriteAsync(ctx, bytes)
+                : LoopbackHttpServer.WriteAsync(ctx, [], status: 404);
+        });
+        using var http = new HttpClient(new LoopbackRewriteHandler(server.BaseUrl));
+        using var f = new Fixture(paths => ManifestTestData.SaveClient(paths, HdSetManifest()), http, releases: new ReleaseCatalog(http));
+        f.Payload("hd_patch_a", "patch-A.mpq");
+        f.Payload("hd_patch_g", "patch-G.mpq");
+
+        await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_a", true);
+        Assert.True(f.Realm.ManagedModState["hd_patch_g"], "A pulls G in");
+        Assert.True(File.Exists(f.Live("Data", "patch-G.mpq")));
+        Assert.True(File.Exists(f.Live("Data", "patch-X.mpq")));
+
+        await f.Mods.SetEnabledAsync(f.Realm, "hd_patch_g", false);
+        Assert.False(f.Realm.ManagedModState["hd_patch_a"], "G off takes A off");
+        Assert.False(File.Exists(f.Live("Data", "patch-A.mpq")));
+        Assert.False(File.Exists(f.Live("Data", "patch-X.mpq")));
+    }
+
+    [Fact]
+    public async Task Materialize_RedownloadsCompatWhenTheReleaseChanged()
+    {
+        var current = Encoding.UTF8.GetBytes("compat-mpq-v2-longer");
+        using var server = new LoopbackHttpServer((ctx, _) =>
+        {
+            var path = ctx.Request.Url!.AbsolutePath;
+            if (path.EndsWith("/releases/tags/patch-a-compat", StringComparison.Ordinal))
+            {
+                var origin = $"{ctx.Request.Url.Scheme}://{ctx.Request.Url.Authority}";
+                var json = $$"""
+                    { "tag_name": "patch-a-compat", "assets": [ { "name": "patch-X.mpq", "browser_download_url": "{{origin}}/patch-X.mpq", "size": {{current.Length}} } ] }
+                    """;
+                ctx.Response.ContentType = "application/json";
+                return LoopbackHttpServer.WriteAsync(ctx, Encoding.UTF8.GetBytes(json));
+            }
+
+            return path.EndsWith("/patch-X.mpq", StringComparison.Ordinal)
+                ? LoopbackHttpServer.WriteAsync(ctx, current)
+                : LoopbackHttpServer.WriteAsync(ctx, [], status: 404);
+        });
+        using var http = new HttpClient(new LoopbackRewriteHandler(server.BaseUrl));
+        using var f = new Fixture(paths => ManifestTestData.SaveClient(paths, HdSetManifest()), http, releases: new ReleaseCatalog(http));
+        f.Payload("hd_patch_g", "patch-G.mpq");
+        f.Payload("patch-a-compat", "patch-X.mpq", "old");
+        f.Realm.ManagedModState["hd_patch_g"] = true;
+
+        await f.Mods.MaterializeAsync(f.Realm, downloadMissing: true);
+
+        Assert.Equal("compat-mpq-v2-longer", File.ReadAllText(f.Live("Data", "patch-X.mpq")));
+    }
+
+    [Fact]
     public async Task EnvironmentSet_IsEnabledAndDisabledTogether()
     {
         using var f = new Fixture(paths => ManifestTestData.SaveClient(paths, HdSetManifest()));
@@ -446,7 +550,7 @@ public class ModManagerTests
         Assert.False(f.Realm.ManagedModState["hd_patch_t"]);
         Assert.False(f.Realm.ManagedModState["hd_patch_u"]);
         Assert.False(File.Exists(f.Live("Data", "patch-U.mpq")));
-        Assert.True(File.Exists(f.Live("Data", "patch-A.mpq")), "unrelated base layer stays");
+        Assert.False(File.Exists(f.Live("Data", "patch-A.mpq")), "A is paired with G (shared DBC changes)");
     }
 
     [Fact]

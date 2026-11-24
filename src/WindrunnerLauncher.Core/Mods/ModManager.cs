@@ -209,15 +209,17 @@ public sealed class ModManager : IManagedAssetRepairer
             var ctx = BuildContext(realm, asset);
             var handler = ModHandlers.For(asset.Kind);
             var applied = handler.IsApplied(ctx);
-            var owner = _manifest.Assets.FirstOrDefault(a =>
-                a.Companions.Any(id => id.Equals(asset.Id, StringComparison.OrdinalIgnoreCase)));
+            var owners = _manifest.Assets
+                .Where(a => a.Companions.Any(id => id.Equals(asset.Id, StringComparison.OrdinalIgnoreCase)))
+                .Select(Display)
+                .ToList();
             items.Add(new ModListItem
             {
                 Asset = asset,
                 Enabled = desired.TryGetValue(asset.Id, out var wanted) && wanted,
                 Installed = applied || handler.IsInstalled(ctx),
                 UpdateAvailable = applied && !ChecksumMatches(ctx, asset),
-                CompanionOf = owner is null ? null : Display(owner)
+                CompanionOf = owners.Count == 0 ? null : string.Join(", ", owners)
             });
         }
 
@@ -549,9 +551,11 @@ public sealed class ModManager : IManagedAssetRepairer
                     continue;
 
                 var dependsOnFollowing = candidate.Dependencies.Any(following.Contains);
-                var carriedByFollowing = _manifest.Assets.Any(owner =>
-                    following.Contains(owner.Id)
-                    && owner.Companions.Any(id => id.Equals(candidate.Id, StringComparison.OrdinalIgnoreCase)));
+                // A shared companion only goes off once every asset that carries it is off.
+                var carriers = _manifest.Assets
+                    .Where(owner => owner.Companions.Any(id => id.Equals(candidate.Id, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+                var carriedByFollowing = carriers.Count > 0 && carriers.All(owner => following.Contains(owner.Id));
 
                 if ((dependsOnFollowing || carriedByFollowing) && following.Add(candidate.Id))
                     changed = true;
@@ -717,6 +721,8 @@ public sealed class ModManager : IManagedAssetRepairer
         }
 
         log.AddRange(MaterializeClientMpqs(realm, ct));
+        if (downloadMissing)
+            log.AddRange(await RefreshTaggedPayloadsAsync(realm, desired, ct).ConfigureAwait(false));
 
         // Disable first so conflicting payloads never occupy the same destination.
         foreach (var asset in Enumerable.Reverse(Order(_manifest.Assets)))
@@ -767,6 +773,57 @@ public sealed class ModManager : IManagedAssetRepairer
         }
 
         Changed?.Invoke();
+        return log;
+    }
+
+    /// <summary>
+    /// Enabled assets that come from a tagged release have no manifest checksum, so a corrected
+    /// release would never be noticed. Compares the published file size with the local copy and
+    /// drops the stale payload so it is downloaded and applied again. Offline or unreadable
+    /// releases keep the copy that is there.
+    /// </summary>
+    private async Task<List<string>> RefreshTaggedPayloadsAsync(
+        RealmEntry realm, Dictionary<string, bool> desired, CancellationToken ct)
+    {
+        var log = new List<string>();
+        if (_releases is null)
+            return log;
+
+        foreach (var asset in _manifest.Assets)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(asset.ReleaseTag) || !string.IsNullOrWhiteSpace(asset.Sha256)
+                || !desired[asset.Id] || !ModHandlers.IsSupported(asset.Kind))
+                continue;
+
+            var handler = ModHandlers.For(asset.Kind);
+            var ctx = BuildContext(realm, asset);
+            if (!handler.IsInstalled(ctx))
+                continue;
+
+            GitHubReleaseAsset remote;
+            try
+            {
+                remote = await _releases.ResolveFileAsync(asset, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                continue;
+            }
+
+            var applied = handler.IsApplied(ctx);
+            var stored = Path.Combine(ctx.StoreDir, PayloadFileName(asset, remote.BrowserDownloadUrl));
+            var local = applied ? ctx.LivePath : stored;
+            if (remote.Size <= 0 || !File.Exists(local) || new FileInfo(local).Length == remote.Size)
+                continue;
+
+            if (applied)
+                await handler.DisableAsync(ctx, ct).ConfigureAwait(false);
+            if (File.Exists(stored))
+                File.Delete(stored);
+            log.Add($"{Display(asset)} has a newer release; downloading it again.");
+        }
+
         return log;
     }
 
@@ -974,16 +1031,16 @@ public sealed class ModManager : IManagedAssetRepairer
         for (var pass = 0; pass <= _manifest.Assets.Count; pass++)
         {
             // A companion whose owner is off is off, even if the realm stored an explicit "on".
+            // A companion shared by several owners stays on while any of them is on.
             var forcedOff = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var owner in _manifest.Assets)
+            var carried = _manifest.Assets
+                .SelectMany(owner => owner.Companions.Select(id => (Owner: owner, Companion: id)))
+                .Where(pair => desired.ContainsKey(pair.Companion))
+                .GroupBy(pair => pair.Companion, StringComparer.OrdinalIgnoreCase);
+            foreach (var group in carried)
             {
-                if (desired[owner.Id])
-                    continue;
-                foreach (var companionId in owner.Companions)
-                {
-                    if (desired.ContainsKey(companionId))
-                        forcedOff.Add(companionId);
-                }
+                if (group.All(pair => !desired[pair.Owner.Id]))
+                    forcedOff.Add(group.Key);
             }
 
             var changed = false;

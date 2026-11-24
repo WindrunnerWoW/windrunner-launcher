@@ -24,7 +24,11 @@ public sealed class ReleaseCatalog
         _github = new GitHubReleases(_http);
     }
 
-    public async Task<string> ResolveAsync(ManagedAsset asset, CancellationToken ct = default)
+    public async Task<string> ResolveAsync(ManagedAsset asset, CancellationToken ct = default) =>
+        (await ResolveFileAsync(asset, ct).ConfigureAwait(false)).BrowserDownloadUrl;
+
+    /// <summary>The release file chosen for the asset, including its published size.</summary>
+    public async Task<GitHubReleaseAsset> ResolveFileAsync(ManagedAsset asset, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(asset.GitHubRepo))
             throw new InvalidOperationException($"{Display(asset)} has no repository to download from.");
@@ -43,7 +47,7 @@ public sealed class ReleaseCatalog
             throw new InvalidOperationException(
                 $"The released files of {asset.GitHubRepo} have no matching Windows download for {Display(asset)}.");
 
-        return picked.BrowserDownloadUrl;
+        return picked;
     }
 
     /// <summary>Reads the requested tag when the asset names one, otherwise the latest release.</summary>
