@@ -93,7 +93,10 @@ public sealed class LauncherRuntime : IDisposable
         var serverInstalled = Server.IsInstalled;
         var clientReady = Client.IsValid(Client.ClientForRealm(realm));
         var outdatedPatches = clientReady
-            ? ClientPatches.PendingFor(realm).Select(update => update.Asset.Name).ToList()
+            ? ClientPatches.PendingFor(realm).Select(update => update.Asset.Name)
+                .Concat(Mods.TaggedUpdatesFor(realm).Select(asset => ModPaths.LeafName(asset.Destination)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
             : [];
         var action = ResolvePlay(realm, serverInstalled, clientReady);
         return new HomeStatus
@@ -126,7 +129,7 @@ public sealed class LauncherRuntime : IDisposable
                 BlockReason = Loc["status.missing"]
             };
 
-        if (Updates.ClientUpdateRequired || ClientPatches.PendingFor(realm).Count > 0)
+        if (Updates.ClientUpdateRequired || ClientPatches.PendingFor(realm).Count > 0 || Mods.TaggedUpdatesFor(realm).Count > 0)
             return new PlayContext { Action = PlayActionKind.Update, ButtonLabel = Loc["update"], Enabled = true };
 
         if (realm.Id == RealmEntry.LocalServerId)

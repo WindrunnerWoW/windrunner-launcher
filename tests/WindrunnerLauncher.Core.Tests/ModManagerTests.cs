@@ -516,6 +516,80 @@ public class ModManagerTests
         Assert.Equal("compat-mpq-v2-longer", File.ReadAllText(f.Live("Data", "patch-X.mpq")));
     }
 
+    private static LoopbackHttpServer CompatReleaseServer(byte[] current) => new((ctx, _) =>
+    {
+        var path = ctx.Request.Url!.AbsolutePath;
+        if (path.EndsWith("/releases/tags/patch-a-compat", StringComparison.Ordinal))
+        {
+            var origin = $"{ctx.Request.Url.Scheme}://{ctx.Request.Url.Authority}";
+            var json = $$"""
+                { "tag_name": "patch-a-compat", "assets": [ { "name": "patch-X.mpq", "browser_download_url": "{{origin}}/patch-X.mpq", "size": {{current.Length}} } ] }
+                """;
+            ctx.Response.ContentType = "application/json";
+            return LoopbackHttpServer.WriteAsync(ctx, Encoding.UTF8.GetBytes(json));
+        }
+
+        return path.EndsWith("/patch-X.mpq", StringComparison.Ordinal)
+            ? LoopbackHttpServer.WriteAsync(ctx, current)
+            : LoopbackHttpServer.WriteAsync(ctx, [], status: 404);
+    });
+
+    [Fact]
+    public async Task CheckTagged_ReportsMissingCompat_AndApplyInstallsIt()
+    {
+        var current = Encoding.UTF8.GetBytes("compat-mpq");
+        using var server = CompatReleaseServer(current);
+        using var http = new HttpClient(new LoopbackRewriteHandler(server.BaseUrl));
+        using var f = new Fixture(paths => ManifestTestData.SaveClient(paths, HdSetManifest()), http, releases: new ReleaseCatalog(http));
+        f.Payload("hd_patch_a", "patch-A.mpq");
+        f.Payload("hd_patch_g", "patch-G.mpq");
+        // HD enabled before the compat patch existed: the realm wants it, nothing downloaded it.
+        f.Realm.ManagedModState["hd_patch_a"] = true;
+        f.Realm.ManagedModState["hd_patch_g"] = true;
+        await f.Mods.MaterializeAsync(f.Realm);
+        Assert.False(File.Exists(f.Live("Data", "patch-X.mpq")));
+
+        await f.Mods.CheckTaggedPayloadsAsync(f.Realm);
+        Assert.Equal(["patch-a-compat"], f.Mods.TaggedUpdatesFor(f.Realm).Select(a => a.Id));
+
+        await f.Mods.ApplyTaggedUpdatesAsync(f.Realm);
+        Assert.Equal("compat-mpq", File.ReadAllText(f.Live("Data", "patch-X.mpq")));
+        Assert.Empty(f.Mods.TaggedUpdatesFor(f.Realm));
+    }
+
+    [Fact]
+    public async Task CheckTagged_ReportsOutdatedLiveCompat_AndApplyReplacesIt()
+    {
+        var current = Encoding.UTF8.GetBytes("compat-mpq-v2-longer");
+        using var server = CompatReleaseServer(current);
+        using var http = new HttpClient(new LoopbackRewriteHandler(server.BaseUrl));
+        using var f = new Fixture(paths => ManifestTestData.SaveClient(paths, HdSetManifest()), http, releases: new ReleaseCatalog(http));
+        f.Payload("hd_patch_a", "patch-A.mpq");
+        f.Payload("hd_patch_g", "patch-G.mpq");
+        f.Payload("patch-a-compat", "patch-X.mpq", "old");
+        f.Realm.ManagedModState["hd_patch_g"] = true;
+        await f.Mods.MaterializeAsync(f.Realm);
+        Assert.Equal("old", File.ReadAllText(f.Live("Data", "patch-X.mpq")));
+
+        await f.Mods.CheckTaggedPayloadsAsync(f.Realm);
+        Assert.Single(f.Mods.TaggedUpdatesFor(f.Realm));
+
+        await f.Mods.ApplyTaggedUpdatesAsync(f.Realm);
+        Assert.Equal("compat-mpq-v2-longer", File.ReadAllText(f.Live("Data", "patch-X.mpq")));
+        Assert.Empty(f.Mods.TaggedUpdatesFor(f.Realm));
+    }
+
+    [Fact]
+    public async Task CheckTagged_IgnoresCompatWhenNoHdPatchIsOn()
+    {
+        using var server = CompatReleaseServer(Encoding.UTF8.GetBytes("compat-mpq"));
+        using var http = new HttpClient(new LoopbackRewriteHandler(server.BaseUrl));
+        using var f = new Fixture(paths => ManifestTestData.SaveClient(paths, HdSetManifest()), http, releases: new ReleaseCatalog(http));
+
+        await f.Mods.CheckTaggedPayloadsAsync(f.Realm);
+        Assert.Empty(f.Mods.TaggedUpdatesFor(f.Realm));
+    }
+
     [Fact]
     public async Task EnvironmentSet_IsEnabledAndDisabledTogether()
     {

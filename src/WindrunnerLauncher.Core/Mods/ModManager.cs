@@ -811,20 +811,185 @@ public sealed class ModManager : IManagedAssetRepairer
                 continue;
             }
 
-            var applied = handler.IsApplied(ctx);
-            var stored = Path.Combine(ctx.StoreDir, PayloadFileName(asset, remote.BrowserDownloadUrl));
-            var local = applied ? ctx.LivePath : stored;
-            if (remote.Size <= 0 || !File.Exists(local) || new FileInfo(local).Length == remote.Size)
+            if (!IsStale(ctx, asset, remote))
                 continue;
 
-            if (applied)
-                await handler.DisableAsync(ctx, ct).ConfigureAwait(false);
-            if (File.Exists(stored))
-                File.Delete(stored);
+            await DropPayloadAsync(ctx, asset, remote, ct).ConfigureAwait(false);
             log.Add($"{Display(asset)} has a newer release; downloading it again.");
         }
 
         return log;
+    }
+
+    /// <summary>
+    /// Assets that are kept in sync with a tagged release (such as the HD compatibility patch
+    /// <c>patch-X.mpq</c>) and that the realm currently wants.
+    /// </summary>
+    private IEnumerable<ManagedAsset> TrackedTaggedAssets(Dictionary<string, bool> desired) =>
+        _manifest.Assets.Where(asset =>
+            !string.IsNullOrWhiteSpace(asset.ReleaseTag)
+            && !string.IsNullOrWhiteSpace(asset.GitHubRepo)
+            && string.IsNullOrWhiteSpace(asset.Sha256)
+            && ModHandlers.IsSupported(asset.Kind)
+            && desired.TryGetValue(asset.Id, out var on) && on);
+
+    /// <summary>
+    /// True when the local copy (live when applied, otherwise the stored payload) differs from the
+    /// published release file: by SHA-256 when GitHub publishes a digest, otherwise by size.
+    /// </summary>
+    private static bool IsStale(ModApplyContext ctx, ManagedAsset asset, GitHubReleaseAsset remote)
+    {
+        var handler = ModHandlers.For(asset.Kind);
+        var stored = Path.Combine(ctx.StoreDir, PayloadFileName(asset, remote.BrowserDownloadUrl));
+        var local = handler.IsApplied(ctx) ? ctx.LivePath : stored;
+        if (!File.Exists(local))
+            return false;
+        if (remote.Size > 0 && new FileInfo(local).Length != remote.Size)
+            return true;
+        return !string.IsNullOrWhiteSpace(remote.Sha256) && !Checksums.VerifyFile(local, remote.Sha256);
+    }
+
+    /// <summary>Takes a stale payload out of the client and the store so the next download replaces it.</summary>
+    private async Task DropPayloadAsync(ModApplyContext ctx, ManagedAsset asset, GitHubReleaseAsset remote, CancellationToken ct)
+    {
+        var handler = ModHandlers.For(asset.Kind);
+        if (handler.IsApplied(ctx))
+            await handler.DisableAsync(ctx, ct).ConfigureAwait(false);
+        var stored = Path.Combine(ctx.StoreDir, PayloadFileName(asset, remote.BrowserDownloadUrl));
+        if (File.Exists(stored))
+            File.Delete(stored);
+    }
+
+    private readonly object _taggedGate = new();
+    private readonly Dictionary<string, GitHubReleaseAsset> _taggedRemote = new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyList<ManagedAsset> _taggedPending = [];
+    private IReadOnlySet<string> _taggedStale = new HashSet<string>();
+    private string? _taggedPlannedDir;
+
+    /// <summary>
+    /// The same check the server's client patches (<c>patch-W.mpq</c>) get at startup, for enabled
+    /// assets that come from a tagged release: reports the ones that are missing or differ from the
+    /// release so Play turns into Update. Nothing is downloaded here. With <paramref name="fetch"/>
+    /// false the releases from the previous check are reused (enough after a realm switch).
+    /// </summary>
+    public async Task CheckTaggedPayloadsAsync(RealmEntry realm, bool fetch = true, CancellationToken ct = default)
+    {
+        var clientDir = ClientDirFor(realm);
+        var pending = new List<ManagedAsset>();
+        var stale = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (Directory.Exists(clientDir))
+        {
+            var desired = ResolveDesiredState(realm);
+            foreach (var asset in TrackedTaggedAssets(desired).ToList())
+            {
+                ct.ThrowIfCancellationRequested();
+                var ctx = BuildContext(realm, asset);
+                if (!ModHandlers.For(asset.Kind).IsInstalled(ctx))
+                {
+                    pending.Add(asset);
+                    continue;
+                }
+
+                var remote = await RemoteFileAsync(asset, fetch, ct).ConfigureAwait(false);
+                if (remote is not null && IsStale(ctx, asset, remote))
+                {
+                    pending.Add(asset);
+                    stale.Add(asset.Id);
+                }
+            }
+        }
+
+        lock (_taggedGate)
+        {
+            _taggedPending = pending;
+            _taggedStale = stale;
+            _taggedPlannedDir = clientDir;
+        }
+
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Tagged assets from the last check that the realm still wants and that still need a download.
+    /// Missing ones drop out as soon as they are installed some other way (e.g. a toggle).
+    /// </summary>
+    public IReadOnlyList<ManagedAsset> TaggedUpdatesFor(RealmEntry realm)
+    {
+        IReadOnlyList<ManagedAsset> pending;
+        IReadOnlySet<string> stale;
+        string? plannedDir;
+        lock (_taggedGate)
+        {
+            pending = _taggedPending;
+            stale = _taggedStale;
+            plannedDir = _taggedPlannedDir;
+        }
+
+        if (pending.Count == 0 || plannedDir is null || !SamePath(plannedDir, ClientDirFor(realm)))
+            return [];
+
+        // Called on every status refresh, so no hashing here: an outdated verdict stands until the
+        // next check or an apply; a missing asset is cheap to re-test.
+        var desired = ResolveDesiredState(realm);
+        return pending.Where(asset =>
+            desired.TryGetValue(asset.Id, out var on) && on
+            && (stale.Contains(asset.Id) || !ModHandlers.For(asset.Kind).IsInstalled(BuildContext(realm, asset))))
+            .ToList();
+    }
+
+    /// <summary>Downloads every pending tagged asset and applies the realm's mods again.</summary>
+    public async Task<IReadOnlyList<string>> ApplyTaggedUpdatesAsync(RealmEntry realm, CancellationToken ct = default)
+    {
+        var log = new List<string>();
+        var pending = TaggedUpdatesFor(realm);
+        if (pending.Count == 0)
+            return log;
+
+        foreach (var asset in pending)
+        {
+            ct.ThrowIfCancellationRequested();
+            var ctx = BuildContext(realm, asset);
+            var remote = await RemoteFileAsync(asset, fetch: true, ct).ConfigureAwait(false);
+            if (remote is not null && ModHandlers.For(asset.Kind).IsInstalled(ctx))
+                await DropPayloadAsync(ctx, asset, remote, ct).ConfigureAwait(false);
+            if (await EnsurePayloadAsync(asset, ct).ConfigureAwait(false) is { } payload)
+                log.Add($"Updated {Path.GetFileName(payload)}.");
+        }
+
+        log.AddRange(await MaterializeAsync(realm, downloadMissing: false, ct).ConfigureAwait(false));
+        lock (_taggedGate)
+        {
+            _taggedPending = _taggedPending.Where(asset => !pending.Contains(asset)).ToList();
+            _taggedStale = _taggedStale.Where(id => !pending.Any(asset => asset.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        Changed?.Invoke();
+        return log;
+    }
+
+    /// <summary>The release file for a tagged asset; null when offline or the release is unreadable.</summary>
+    private async Task<GitHubReleaseAsset?> RemoteFileAsync(ManagedAsset asset, bool fetch, CancellationToken ct)
+    {
+        lock (_taggedGate)
+        {
+            if (!fetch && _taggedRemote.TryGetValue(asset.Id, out var cached))
+                return cached;
+        }
+
+        if (_releases is null)
+            return null;
+        try
+        {
+            var remote = await _releases.ResolveFileAsync(asset, ct).ConfigureAwait(false);
+            lock (_taggedGate)
+                _taggedRemote[asset.Id] = remote;
+            return remote;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            lock (_taggedGate)
+                return _taggedRemote.GetValueOrDefault(asset.Id);
+        }
     }
 
     /// <summary>Downloads a payload into <c>mods/&lt;assetId&gt;</c> and verifies its checksum.</summary>

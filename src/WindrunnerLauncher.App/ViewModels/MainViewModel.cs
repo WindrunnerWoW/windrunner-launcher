@@ -357,6 +357,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 case PlayActionKind.Update:
                     var realm = _runtime.State.SelectedRealm();
                     await _runtime.ClientPatches.ApplyAsync(realm);
+                    await _runtime.Mods.ApplyTaggedUpdatesAsync(realm);
                     if (_runtime.Updates.ClientUpdateRequired)
                         await _runtime.Updates.UpdateClientAsync();
                     break;
@@ -615,6 +616,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch
         {
             // Offline or rate-limited; Play keeps working with the patches already installed.
+        }
+
+        try
+        {
+            // Mod files published as tagged releases (the HD compatibility patch-X.mpq) get the
+            // same treatment: missing or outdated ones turn Play into Update.
+            await _runtime.Mods.CheckTaggedPayloadsAsync(realm, fetch).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Same as above: keep whatever is installed.
         }
 
         Dispatcher.UIThread.Post(Refresh);

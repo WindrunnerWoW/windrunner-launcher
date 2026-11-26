@@ -7,6 +7,7 @@ using Avalonia.Styling;
 using WindrunnerLauncher.Core.Client;
 using WindrunnerLauncher.Core.Downloads;
 using WindrunnerLauncher.Core.Models;
+using WindrunnerLauncher.Core.Mods;
 using WindrunnerLauncher.Core.Platform;
 
 namespace WindrunnerLauncher.App.ViewModels;
@@ -373,6 +374,7 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
         {
             await Main.Runtime.Updates.CheckAsync();
             await Main.Runtime.ClientPatches.CheckAsync(realm, fetch: true);
+            await Main.Runtime.Mods.CheckTaggedPayloadsAsync(realm, fetch: true);
         });
         UpdateCheckStatus = ok ? BuildUpdateSummary(realm) : "The update check did not finish. See the error dialog for details.";
         OnPropertyChanged(nameof(MapsUpdateAvailable));
@@ -392,7 +394,10 @@ public sealed partial class SettingsViewModel : RuntimeViewModel, IDisposable
                 : "Maps are up to date."
         };
 
-        var patches = Main.Runtime.ClientPatches.PendingFor(realm).Select(update => update.Asset.Name).ToList();
+        var patches = Main.Runtime.ClientPatches.PendingFor(realm).Select(update => update.Asset.Name)
+            .Concat(Main.Runtime.Mods.TaggedUpdatesFor(realm).Select(asset => ModPaths.LeafName(asset.Destination)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         lines.Add(patches.Count == 0
             ? "Client patches are up to date."
             : $"Client patches to update: {string.Join(", ", patches)}. Press Update on the Play bar.");
